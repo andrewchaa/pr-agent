@@ -8,7 +8,7 @@ PR Agent is a CLI tool that analyzes your code changes and generates intelligent
 
 - **Local LLM**: Uses Ollama with Qwen 2.5 3B model (no external API calls)
 - **Intelligent PR Descriptions**: Generates comprehensive PR descriptions based on code changes
-- **Ticket Integration**: Automatically extracts ticket numbers from branch names
+- **Smart Ticket Extraction**: AI-powered extraction handles any branch naming convention (regex → AI → manual fallback)
 - **Git Integration**: Analyzes diffs, changed files, and commit messages
 - **GitHub CLI**: Seamlessly creates PRs using `gh` command
 - **Customizable Templates**: Configure PR sections to match your workflow
@@ -159,25 +159,43 @@ export PR_AGENT_OLLAMA_URL="http://localhost:11434"
 
 ## Branch Naming Convention
 
-PR Agent works best when your branch names include a ticket number. Supported formats:
+PR Agent uses **intelligent ticket extraction** with a two-step approach:
 
+### Extraction Methods
+
+1. **Regex Pattern Matching** (fast) - Tries pattern matching first
+2. **AI Extraction** (flexible) - If regex fails, uses LLM to intelligently extract the ticket
+3. **Manual Input** (fallback) - Prompts you to enter the ticket number
+
+### Supported Branch Name Formats
+
+PR Agent handles virtually any branch naming convention! Examples:
+
+**Standard formats:**
 - `feature/STAR-12345-add-feature`
 - `STAR-999-bugfix`
 - `bugfix/STAR-456-fix-memory-leak`
-- `star-422270-test` (lowercase works too!)
 
-**Note:** Ticket extraction is **case-insensitive**, so `star-123`, `STAR-123`, and `Star-123` all work and will be normalized to `STAR-123`.
+**Variations the AI can handle:**
+- `star-422270-test` (lowercase)
+- `feature_star_123_something` (underscores)
+- `bugfix-with-star-789-somewhere` (ticket in middle)
+- `star123feature` (no separators)
+- `my-feature-with-STAR-999` (any position)
 
-The default pattern extracts `STAR-(\d+)`. You can customize this in the config file.
+**Note:**
+- Regex extraction is **case-insensitive** and normalizes to uppercase (e.g., `star-123` → `STAR-123`)
+- AI extraction is extremely flexible and can find tickets in unconventional branch names
+- Default pattern: `STAR-(\d+)` (customizable in config)
 
-If no ticket is found, you'll be prompted to enter one manually.
+The AI extraction means you don't need to follow strict branch naming rules!
 
 ## How It Works
 
 1. **Validation**: Checks for git repo, GitHub authentication, and Ollama service
 2. **Information Gathering**:
    - Extracts current branch name
-   - Parses ticket number from branch name
+   - Intelligently parses ticket number (regex → AI → manual)
    - Retrieves git diff and changed files
    - Prompts user for change purpose
 3. **AI Generation**:
@@ -261,7 +279,7 @@ ruff check pr_agent/
 
 ## Examples
 
-### Example 1: Feature Addition
+### Example 1: Standard Branch Format
 
 ```bash
 # On branch: feature/STAR-12345-add-oauth
@@ -273,7 +291,8 @@ $ pr-agent create
 ✓ Model 'qwen2.5:3b' available
 
 Current branch: feature/STAR-12345-add-oauth
-Detected ticket number: STAR-12345
+
+✓ Detected ticket number (regex): STAR-12345
 
 What is the purpose of this change?
 > Add OAuth 2.0 authentication flow for third-party integrations
@@ -286,6 +305,29 @@ Title: STAR-12345: Add OAuth 2.0 authentication flow
 Create this pull request? [Y/n]: y
 ✓ Pull request created successfully!
 URL: https://github.com/org/repo/pull/123
+```
+
+### Example 1b: Unconventional Branch Name (AI Extraction)
+
+```bash
+# On branch: bugfix_with_star_422270_somewhere
+$ pr-agent create
+
+✓ Git repository detected
+✓ GitHub CLI authenticated
+✓ Ollama service available
+✓ Model 'qwen2.5:3b' available
+
+Current branch: bugfix_with_star_422270_somewhere
+
+Regex pattern didn't match. Trying AI extraction...
+[Analyzing branch name with AI...]
+✓ Detected ticket number (AI): STAR-422270
+
+What is the purpose of this change?
+> Fix memory leak in background processor
+
+[Generating PR description...]
 ```
 
 ### Example 2: Bug Fix with Custom Base

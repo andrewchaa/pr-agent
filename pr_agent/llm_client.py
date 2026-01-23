@@ -167,3 +167,46 @@ class OllamaClient:
             full_prompt = f"{prompt}\n\nContext:\n{context}"
 
         return self.generate(full_prompt, model=model)
+
+    def extract_ticket_number(
+        self,
+        branch_name: str,
+        ticket_prefix: str = "STAR",
+        model: str = "qwen2.5:3b",
+    ) -> Optional[str]:
+        """
+        Extract ticket number from branch name using LLM.
+
+        Args:
+            branch_name: Branch name to extract ticket from
+            ticket_prefix: Expected ticket prefix (e.g., "STAR", "JIRA", "ENG")
+            model: Model name to use. Default: "qwen2.5:3b"
+
+        Returns:
+            Ticket number (e.g., "STAR-12345") or None if not found.
+        """
+        from pr_agent.prompts import PRPrompts
+
+        prompt = PRPrompts.extract_ticket_number_prompt(branch_name, ticket_prefix)
+
+        response = self.generate(
+            prompt=prompt,
+            model=model,
+            temperature=0.1,  # Low temperature for consistent extraction
+        )
+
+        # Parse response
+        response = response.strip().upper()
+
+        # Check if LLM found a ticket
+        if response == "NONE" or not response:
+            return None
+
+        # Clean up response - extract just the ticket number
+        # Format should be: STAR-12345
+        import re
+        match = re.search(rf"{ticket_prefix.upper()}-\d+", response)
+        if match:
+            return match.group(0)
+
+        return None

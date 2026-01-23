@@ -16,6 +16,49 @@ pull request descriptions. You analyze code changes and explain them in a way th
 code reviewers understand the purpose, impact, and context of the changes."""
 
     @staticmethod
+    def extract_ticket_number_prompt(branch_name: str, ticket_prefix: str = "STAR") -> str:
+        """
+        Generate prompt for extracting ticket number from branch name using LLM.
+
+        Args:
+            branch_name: Branch name to extract ticket from
+            ticket_prefix: Expected ticket prefix (e.g., "STAR", "JIRA", "ENG")
+
+        Returns:
+            Prompt for ticket extraction.
+        """
+        return f"""Extract the ticket number from this git branch name: "{branch_name}"
+
+The ticket number typically starts with "{ticket_prefix}" followed by a dash and numbers.
+Common formats include:
+- {ticket_prefix}-12345
+- {ticket_prefix.lower()}-12345
+- {ticket_prefix.upper()}-12345
+
+Branch name variations:
+- feature/{ticket_prefix}-123-description
+- {ticket_prefix}-123-some-feature
+- bugfix-{ticket_prefix.lower()}-456-fix
+- {ticket_prefix.lower()}_789_something
+- and many other creative formats
+
+Instructions:
+1. Look for the ticket identifier in the branch name
+2. Return ONLY the ticket number in the format: {ticket_prefix.upper()}-[number]
+3. If you find the ticket, return just the ticket like: {ticket_prefix.upper()}-12345
+4. If no ticket number is found, return exactly: NONE
+
+Examples:
+- "star-422270-test" → STAR-422270
+- "feature/STAR-12345-add-auth" → STAR-12345
+- "bugfix_star_999_memory_leak" → STAR-999
+- "some-branch-without-ticket" → NONE
+
+Now extract from: "{branch_name}"
+
+Return ONLY the ticket number or NONE, nothing else."""
+
+    @staticmethod
     def generate_title_prompt(ticket_number: str, branch_name: str, user_intent: str) -> str:
         """
         Generate prompt for PR title creation.

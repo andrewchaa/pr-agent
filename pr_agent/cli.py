@@ -91,32 +91,69 @@ def validate_prerequisites(
     return True
 
 
-def get_ticket_number(git_ops: GitOperations, config: Config) -> str:
+def get_ticket_number(
+    git_ops: GitOperations,
+    config: Config,
+    llm_client: Optional[OllamaClient] = None,
+) -> str:
     """
     Extract or prompt for ticket number.
+
+    Tries multiple methods in order:
+    1. Regex pattern matching (fast)
+    2. LLM extraction (flexible, handles variations)
+    3. Manual user input (fallback)
 
     Args:
         git_ops: Git operations handler
         config: Configuration
+        llm_client: Optional LLM client for intelligent extraction
 
     Returns:
         Ticket number.
     """
     branch_name = git_ops.get_current_branch()
+
+    # Method 1: Try regex extraction first (fast)
     ticket_number = git_ops.extract_ticket_number(branch_name, config.ticket_pattern)
 
     if ticket_number:
-        console.print(f"[green]Detected ticket number:[/green] {ticket_number}")
+        console.print(f"[green]✓ Detected ticket number (regex):[/green] {ticket_number}")
         return ticket_number
-    else:
+
+    # Method 2: Try LLM extraction (handles variations)
+    if llm_client:
         console.print(
-            f"[yellow]Warning: Could not extract ticket number from branch '{branch_name}'[/yellow]"
+            f"[yellow]Regex pattern didn't match. Trying AI extraction...[/yellow]"
         )
-        ticket_number = Prompt.ask(
-            "Please enter ticket number (e.g., STAR-12345)",
-            default="STAR-0000"
-        )
-        return ticket_number
+        try:
+            # Extract ticket prefix from pattern (e.g., "STAR-(\d+)" -> "STAR")
+            import re
+            pattern_match = re.match(r"([A-Z]+)-", config.ticket_pattern)
+            ticket_prefix = pattern_match.group(1) if pattern_match else "STAR"
+
+            with console.status("[bold cyan]Analyzing branch name with AI...[/bold cyan]"):
+                ticket_number = llm_client.extract_ticket_number(
+                    branch_name=branch_name,
+                    ticket_prefix=ticket_prefix,
+                    model=config.model,
+                )
+
+            if ticket_number:
+                console.print(f"[green]✓ Detected ticket number (AI):[/green] {ticket_number}")
+                return ticket_number
+        except Exception as e:
+            console.print(f"[yellow]AI extraction failed: {e}[/yellow]")
+
+    # Method 3: Manual input (fallback)
+    console.print(
+        f"[yellow]Could not extract ticket number from branch '{branch_name}'[/yellow]"
+    )
+    ticket_number = Prompt.ask(
+        "Please enter ticket number (e.g., STAR-12345)",
+        default="STAR-0000"
+    )
+    return ticket_number
 
 
 def prompt_user_intent() -> str:
@@ -246,8 +283,9 @@ def create(
         # Get branch and ticket information
         branch_name = git_ops.get_current_branch()
         console.print(f"[blue]Current branch:[/blue] {branch_name}")
+        console.print()
 
-        ticket_number = get_ticket_number(git_ops, cfg)
+        ticket_number = get_ticket_number(git_ops, cfg, llm_client)
 
         # Check for uncommitted changes
         if git_ops.has_uncommitted_changes():
