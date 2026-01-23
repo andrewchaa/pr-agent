@@ -1,0 +1,20 @@
+# Sample configuration file for pr-agent
+# Copy this to ~/.config/pr-agent/config.yaml and customize
+
+# Model settings
+model: "qwen2.5:3b"
+ollama_base_url: "http://localhost:11434"
+
+# Git settings
+default_base_branch: "main"
+ticket_pattern: "STAR-(\\d+)"
+
+# LLM settings
+max_diff_tokens: 8000
+
+# PR template (customizable per repository)
+template:
+  sections:
+    - "Why are you making this change?"
+    - "What are the possible impacts of your change to production?"
+    - "Is there anything else PR reviewers should know about?"

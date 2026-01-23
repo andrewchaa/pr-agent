@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pr-agent"
+version = "0.1.0"
+description = "Automated GitHub PR creation using local LLM"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "PR Agent Contributors"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "click>=8.1.0",        # CLI framework
+    "requests>=2.31.0",    # HTTP for Ollama API
+    "pyyaml>=6.0",        # Config parsing
+    "gitpython>=3.1.0",   # Git operations
+    "rich>=13.0.0",       # Terminal UI
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+pr-agent = "pr_agent.cli:main"
+
+[tool.setuptools]
+packages = ["pr_agent"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=pr_agent --cov-report=term-missing"

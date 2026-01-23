@@ -1,0 +1,369 @@
+"""
+CLI interface for pr-agent.
+
+Main command-line interface that orchestrates PR creation workflow.
+"""
+
+import sys
+from pathlib import Path
+from typing import Optional
+
+import click
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt, Confirm
+from rich.markdown import Markdown
+from rich import print as rprint
+
+from pr_agent.config import load_config, Config
+from pr_agent.git_operations import GitOperations
+from pr_agent.github_operations import GitHubOperations
+from pr_agent.llm_client import OllamaClient
+from pr_agent.pr_generator import PRGenerator
+from pr_agent.exceptions import (
+    PRAgentError,
+    NotInGitRepoError,
+    NotAuthenticatedError,
+    OllamaNotAvailableError,
+    ModelNotFoundError,
+    NoChangesError,
+)
+
+console = Console()
+
+
+def validate_prerequisites(
+    git_ops: GitOperations,
+    github_ops: GitHubOperations,
+    llm_client: OllamaClient,
+    model: str,
+) -> bool:
+    """
+    Validate all prerequisites for PR creation.
+
+    Args:
+        git_ops: Git operations handler
+        github_ops: GitHub operations handler
+        llm_client: Ollama client
+        model: Model name to check
+
+    Returns:
+        True if all checks pass.
+
+    Raises:
+        PRAgentError: If any prerequisite check fails.
+    """
+    console.print("[bold blue]Validating prerequisites...[/bold blue]")
+
+    # Check 1: Git repository
+    try:
+        git_ops.validate_git_repo()
+        console.print("✓ Git repository detected", style="green")
+    except NotInGitRepoError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
+    # Check 2: GitHub CLI authentication
+    try:
+        github_ops.check_gh_auth()
+        console.print("✓ GitHub CLI authenticated", style="green")
+    except NotAuthenticatedError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
+    # Check 3: Ollama service
+    try:
+        llm_client.check_availability()
+        console.print("✓ Ollama service available", style="green")
+    except OllamaNotAvailableError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
+    # Check 4: Model availability
+    try:
+        llm_client.check_model_exists(model)
+        console.print(f"✓ Model '{model}' available", style="green")
+    except ModelNotFoundError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
+    console.print()
+    return True
+
+
+def get_ticket_number(git_ops: GitOperations, config: Config) -> str:
+    """
+    Extract or prompt for ticket number.
+
+    Args:
+        git_ops: Git operations handler
+        config: Configuration
+
+    Returns:
+        Ticket number.
+    """
+    branch_name = git_ops.get_current_branch()
+    ticket_number = git_ops.extract_ticket_number(branch_name, config.ticket_pattern)
+
+    if ticket_number:
+        console.print(f"[green]Detected ticket number:[/green] {ticket_number}")
+        return ticket_number
+    else:
+        console.print(
+            f"[yellow]Warning: Could not extract ticket number from branch '{branch_name}'[/yellow]"
+        )
+        ticket_number = Prompt.ask(
+            "Please enter ticket number (e.g., STAR-12345)",
+            default="STAR-0000"
+        )
+        return ticket_number
+
+
+def prompt_user_intent() -> str:
+    """
+    Prompt user for the purpose of their change.
+
+    Returns:
+        User's description of the change purpose.
+    """
+    console.print()
+    console.print("[bold cyan]What is the purpose of this change?[/bold cyan]")
+    console.print("[dim]Describe what you're trying to achieve (this helps generate better PR descriptions)[/dim]")
+    console.print()
+
+    user_intent = Prompt.ask("Purpose")
+
+    while not user_intent.strip():
+        console.print("[red]Please provide a description of your changes.[/red]")
+        user_intent = Prompt.ask("Purpose")
+
+    return user_intent.strip()
+
+
+def display_preview(title: str, body: str, base_branch: str) -> None:
+    """
+    Display PR preview with Rich formatting.
+
+    Args:
+        title: PR title
+        body: PR description
+        base_branch: Base branch name
+    """
+    console.print()
+    console.print("[bold green]PR Preview:[/bold green]")
+    console.print()
+
+    # Display title
+    console.print(Panel(
+        f"[bold]{title}[/bold]",
+        title="Title",
+        border_style="cyan"
+    ))
+
+    # Display base branch
+    console.print(f"[dim]Base branch:[/dim] {base_branch}")
+    console.print()
+
+    # Display body
+    md = Markdown(body)
+    console.print(Panel(
+        md,
+        title="Description",
+        border_style="cyan"
+    ))
+    console.print()
+
+
+@click.group()
+@click.version_option(version="0.1.0")
+def cli():
+    """PR Agent - Automated GitHub PR creation using local LLM."""
+    pass
+
+
+@cli.command()
+@click.option(
+    "--base-branch", "-b",
+    default=None,
+    help="Base branch for the PR (default: from config or 'main')"
+)
+@click.option(
+    "--model", "-m",
+    default=None,
+    help="LLM model to use (default: from config or 'qwen2.5:3b')"
+)
+@click.option(
+    "--config", "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to config file (default: ~/.config/pr-agent/config.yaml)"
+)
+@click.option(
+    "--draft", "-d",
+    is_flag=True,
+    help="Create as draft PR"
+)
+@click.option(
+    "--web", "-w",
+    is_flag=True,
+    help="Open PR in browser after creation"
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview PR without creating it"
+)
+def create(
+    base_branch: Optional[str],
+    model: Optional[str],
+    config: Optional[Path],
+    draft: bool,
+    web: bool,
+    dry_run: bool,
+):
+    """Create a new pull request with AI-generated description."""
+    try:
+        # Load configuration
+        cfg = load_config(
+            config_file=config,
+            base_branch=base_branch,
+            model=model,
+            draft=draft,
+            web=web,
+        )
+
+        # Initialize components
+        git_ops = GitOperations()
+        github_ops = GitHubOperations()
+        llm_client = OllamaClient(
+            base_url=cfg.ollama_base_url,
+            timeout=cfg.ollama_timeout
+        )
+
+        # Validate prerequisites
+        validate_prerequisites(git_ops, github_ops, llm_client, cfg.model)
+
+        # Get branch and ticket information
+        branch_name = git_ops.get_current_branch()
+        console.print(f"[blue]Current branch:[/blue] {branch_name}")
+
+        ticket_number = get_ticket_number(git_ops, cfg)
+
+        # Check for uncommitted changes
+        if git_ops.has_uncommitted_changes():
+            console.print(
+                "[yellow]Warning: You have uncommitted changes. "
+                "These will not be included in the PR.[/yellow]"
+            )
+            if not Confirm.ask("Continue anyway?", default=False):
+                console.print("[red]Aborted.[/red]")
+                sys.exit(0)
+
+        # Check if diff exists
+        try:
+            git_ops.get_diff(cfg.default_base_branch)
+        except NoChangesError as e:
+            console.print(f"[red]{e}[/red]")
+            sys.exit(1)
+
+        # Prompt for user intent
+        user_intent = prompt_user_intent()
+
+        # Generate PR content
+        console.print()
+        with console.status("[bold green]Generating PR description with AI...[/bold green]"):
+            pr_generator = PRGenerator(
+                llm_client=llm_client,
+                git_ops=git_ops,
+                model=cfg.model,
+                max_diff_tokens=cfg.max_diff_tokens,
+            )
+
+            # Generate title
+            title = pr_generator.generate_title(
+                ticket_number=ticket_number,
+                branch_name=branch_name,
+                user_intent=user_intent,
+            )
+
+            # Generate description
+            description = pr_generator.generate_description(
+                user_intent=user_intent,
+                base_branch=cfg.default_base_branch,
+                template_sections=cfg.template_sections,
+            )
+
+        # Display preview
+        display_preview(title, description, cfg.default_base_branch)
+
+        # Dry run mode - exit here
+        if dry_run:
+            console.print("[yellow]Dry run mode - PR not created[/yellow]")
+            sys.exit(0)
+
+        # Confirm creation
+        if not Confirm.ask("Create this pull request?", default=True):
+            console.print("[yellow]PR creation cancelled.[/yellow]")
+            sys.exit(0)
+
+        # Check if branch is pushed to remote
+        console.print()
+        if not github_ops.check_remote_branch_exists(branch_name):
+            console.print("[yellow]Branch not pushed to remote yet.[/yellow]")
+            if Confirm.ask("Push branch now?", default=True):
+                with console.status("[bold green]Pushing branch...[/bold green]"):
+                    github_ops.push_current_branch()
+                console.print("[green]✓ Branch pushed successfully[/green]")
+            else:
+                console.print("[red]Cannot create PR without pushing branch first.[/red]")
+                sys.exit(1)
+
+        # Create PR
+        console.print()
+        with console.status("[bold green]Creating pull request...[/bold green]"):
+            pr_url = github_ops.create_pull_request(
+                title=title,
+                body=description,
+                base=cfg.default_base_branch,
+                draft=cfg.draft_pr,
+                web=cfg.open_in_browser,
+            )
+
+        # Success!
+        console.print()
+        console.print("[bold green]✓ Pull request created successfully![/bold green]")
+        console.print(f"[blue]URL:[/blue] {pr_url}")
+
+    except PRAgentError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled by user.[/yellow]")
+        sys.exit(130)
+    except Exception as e:
+        console.print(f"\n[red]Unexpected error:[/red] {e}")
+        if "--debug" in sys.argv:
+            raise
+        sys.exit(1)
+
+
+@cli.command()
+def init_config():
+    """Create a default configuration file."""
+    try:
+        config_path = Config.create_default_config_file()
+        console.print(f"[green]✓ Created default config file at:[/green] {config_path}")
+        console.print()
+        console.print("[dim]Edit this file to customize pr-agent settings.[/dim]")
+    except Exception as e:
+        console.print(f"[red]Failed to create config file:[/red] {e}")
+        sys.exit(1)
+
+
+def main():
+    """Main entry point for CLI."""
+    cli()
+
+
+if __name__ == "__main__":
+    main()
