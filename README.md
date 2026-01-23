@@ -9,6 +9,7 @@ PR Agent is a CLI tool that analyzes your code changes and generates intelligent
 - **Local LLM**: Uses Ollama with Qwen 2.5 3B model (no external API calls)
 - **Intelligent PR Descriptions**: Generates comprehensive PR descriptions based on code changes
 - **Smart Ticket Extraction**: AI-powered extraction handles any branch naming convention (regex → AI → manual fallback)
+- **Auto-Detect Base Branch**: Automatically detects default branch (main, master, develop) - no configuration needed
 - **Git Integration**: Analyzes diffs, changed files, and commit messages
 - **GitHub CLI**: Seamlessly creates PRs using `gh` command
 - **Customizable Templates**: Configure PR sections to match your workflow
@@ -51,16 +52,22 @@ pip install .
 ## Quick Start
 
 1. Make some code changes in a git repository
-2. Commit your changes to a feature branch (preferably with a ticket number in the name)
+2. **Commit your changes** to a feature branch (preferably with a ticket number in the name)
+   ```bash
+   git add .
+   git commit -m "Your commit message"
+   # Optional: push your changes
+   git push -u origin your-branch-name
+   ```
 3. Run PR Agent:
-
-```bash
-pr-agent create
-```
-
+   ```bash
+   pr-agent create
+   ```
 4. Answer the prompt about your change purpose
 5. Review the generated PR preview
 6. Confirm to create the PR
+
+**Note:** You must commit your changes BEFORE running pr-agent. The tool analyzes committed changes, not uncommitted files.
 
 ## Usage
 
@@ -88,6 +95,45 @@ pr-agent create --dry-run
 
 ```bash
 pr-agent create --draft
+```
+
+### Typical Workflow
+
+PR Agent works with **committed changes only**. Here are two common workflows:
+
+**Workflow 1: Commit first, then create PR**
+```bash
+# 1. Make your changes
+vim myfile.py
+
+# 2. Commit them
+git add .
+git commit -m "Implement new feature"
+
+# 3. Run pr-agent (it will push if needed)
+pr-agent create
+```
+
+**Workflow 2: Commit and push, then create PR**
+```bash
+# 1. Make changes and commit
+git add .
+git commit -m "Fix bug in processor"
+
+# 2. Push to remote
+git push -u origin my-feature-branch
+
+# 3. Run pr-agent
+pr-agent create
+# ✓ Works! PR Agent analyzes your committed changes
+```
+
+**What doesn't work:**
+```bash
+# ✗ This won't work - changes not committed
+vim myfile.py
+pr-agent create
+# Error: No commits found
 ```
 
 ### Open PR in Browser
@@ -227,6 +273,29 @@ Pull the model with:
 ```bash
 ollama pull qwen2.5:3b
 ```
+
+### Error: Base branch 'main' not found
+
+PR Agent **auto-detects** your repository's default branch. If you see this error:
+
+1. **Let PR Agent detect it automatically** (recommended):
+   ```bash
+   pr-agent create
+   # It will auto-detect: master, main, develop, etc.
+   ```
+
+2. **Manually specify the base branch**:
+   ```bash
+   pr-agent create --base-branch master
+   ```
+
+3. **Update your config file** to set a different default:
+   ```yaml
+   # ~/.config/pr-agent/config.yaml
+   default_base_branch: "master"  # or develop, etc.
+   ```
+
+The error message will suggest available branches in your repository.
 
 ### Empty or poor quality PR descriptions
 

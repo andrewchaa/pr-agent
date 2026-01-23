@@ -280,6 +280,24 @@ def create(
         # Validate prerequisites
         validate_prerequisites(git_ops, github_ops, llm_client, cfg.model)
 
+        # Auto-detect base branch if not explicitly set
+        if not base_branch:  # Only auto-detect if user didn't specify
+            detected_base = git_ops.get_default_branch()
+            if detected_base and detected_base != cfg.default_base_branch:
+                console.print(
+                    f"[cyan]Auto-detected base branch:[/cyan] {detected_base} "
+                    f"[dim](instead of default '{cfg.default_base_branch}')[/dim]"
+                )
+                cfg.default_base_branch = detected_base
+            elif not git_ops.branch_exists(cfg.default_base_branch):
+                # Config default doesn't exist, try to find one
+                if detected_base:
+                    console.print(
+                        f"[yellow]Base branch '{cfg.default_base_branch}' not found. "
+                        f"Using '{detected_base}' instead.[/yellow]"
+                    )
+                    cfg.default_base_branch = detected_base
+
         # Get branch and ticket information
         branch_name = git_ops.get_current_branch()
         console.print(f"[blue]Current branch:[/blue] {branch_name}")
@@ -297,12 +315,27 @@ def create(
                 console.print("[red]Aborted.[/red]")
                 sys.exit(0)
 
-        # Check if diff exists
-        try:
-            git_ops.get_diff(cfg.default_base_branch)
-        except NoChangesError as e:
-            console.print(f"[red]{e}[/red]")
+        # Check if there are commits to create PR for
+        commit_count = git_ops.get_commit_count(cfg.default_base_branch)
+
+        if commit_count == 0:
+            console.print(
+                f"[red]No commits found on '{branch_name}' compared to '{cfg.default_base_branch}'.[/red]"
+            )
+            console.print()
+            console.print("This could mean:")
+            console.print("  • You're on the base branch itself")
+            console.print("  • Your changes haven't been committed yet")
+            console.print("  • Your branch is already merged")
+            console.print()
+            console.print("To create a PR, you need to:")
+            console.print("  1. Make some changes")
+            console.print("  2. Commit them: [cyan]git add . && git commit -m 'your message'[/cyan]")
+            console.print(f"  3. Make sure you're not on '{cfg.default_base_branch}'")
             sys.exit(1)
+
+        console.print(f"[green]✓ Found {commit_count} commit(s) to include in PR[/green]")
+        console.print()
 
         # Prompt for user intent
         user_intent = prompt_user_intent()

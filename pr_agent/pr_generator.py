@@ -192,10 +192,16 @@ class PRGenerator:
         # Get git information
         changed_files = self.git_ops.get_changed_files(base_branch)
         commit_messages = self.git_ops.get_commit_messages(base_branch)
-        diff = self.git_ops.get_diff(base_branch)
+
+        # Get diff (allow empty in case there are commits but no file changes)
+        try:
+            diff = self.git_ops.get_diff(base_branch, allow_empty=True)
+        except Exception:
+            # Fallback to empty diff if something goes wrong
+            diff = ""
 
         # Truncate diff if too large
-        if len(diff) > self.max_diff_tokens:
+        if diff and len(diff) > self.max_diff_tokens:
             diff = diff[:self.max_diff_tokens] + "\n\n... (diff truncated)"
 
         # Use default sections if not provided

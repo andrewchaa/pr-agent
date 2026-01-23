@@ -92,33 +92,48 @@ class GitOperations:
             return match.group(0).upper()
         return None
 
-    def get_diff(self, base_branch: str = "main") -> str:
+    def get_diff(self, base_branch: str = "main", allow_empty: bool = False) -> str:
         """
         Get unified diff against base branch.
 
         Args:
             base_branch: Branch to diff against. Default: "main"
+            allow_empty: If True, returns empty string instead of raising error. Default: False
 
         Returns:
             Unified diff string.
 
         Raises:
-            NoChangesError: If there are no changes.
+            NoChangesError: If there are no changes and allow_empty is False.
         """
         try:
             # Get diff between base branch and current HEAD
             diff = self.repo.git.diff(f"{base_branch}...HEAD")
 
             if not diff.strip():
+                if allow_empty:
+                    return ""
                 raise NoChangesError()
 
             return diff
         except git.exc.GitCommandError as e:
-            if "unknown revision" in str(e).lower():
-                raise BranchNameError(
-                    f"Base branch '{base_branch}' not found. "
-                    "Please specify a valid base branch."
-                )
+            if "unknown revision" in str(e).lower() or "bad revision" in str(e).lower():
+                # Provide helpful error message with suggestions
+                available_branches = self.get_available_branches()
+                error_msg = f"Base branch '{base_branch}' not found.\n"
+
+                if available_branches:
+                    # Suggest common alternatives
+                    common = [b for b in ['main', 'master', 'develop'] if b in available_branches]
+                    if common:
+                        error_msg += f"\nTry one of these instead: {', '.join(common)}"
+                        error_msg += f"\nExample: pr-agent create --base-branch {common[0]}"
+                    else:
+                        error_msg += f"\nAvailable branches: {', '.join(available_branches[:5])}"
+                        if len(available_branches) > 5:
+                            error_msg += f" (and {len(available_branches) - 5} more)"
+
+                raise BranchNameError(error_msg)
             raise
 
     def get_changed_files(self, base_branch: str = "main") -> List[str]:
@@ -175,6 +190,48 @@ class GitOperations:
         """
         return self.repo.is_dirty()
 
+    def has_commits_ahead(self, base_branch: str = "main") -> bool:
+        """
+        Check if current branch has commits ahead of base branch.
+
+        Args:
+            base_branch: Branch to compare against. Default: "main"
+
+        Returns:
+            True if current branch has commits not in base branch.
+        """
+        try:
+            # Get commits that are in HEAD but not in base_branch
+            commits = self.repo.git.log(
+                f"{base_branch}..HEAD",
+                pretty="format:%H",
+                max_count=1  # Just check if at least one exists
+            ).strip()
+
+            return bool(commits)
+        except git.exc.GitCommandError:
+            return False
+
+    def get_commit_count(self, base_branch: str = "main") -> int:
+        """
+        Get number of commits ahead of base branch.
+
+        Args:
+            base_branch: Branch to compare against. Default: "main"
+
+        Returns:
+            Number of commits.
+        """
+        try:
+            count = self.repo.git.rev_list(
+                f"{base_branch}..HEAD",
+                count=True
+            ).strip()
+
+            return int(count) if count else 0
+        except (git.exc.GitCommandError, ValueError):
+            return 0
+
     def get_repository_root(self) -> Path:
         """
         Get the root directory of the git repository.
@@ -183,3 +240,93 @@ class GitOperations:
             Path to repository root.
         """
         return Path(self.repo.working_dir)
+
+    def get_default_branch(self) -> Optional[str]:
+        """
+        Detect the default branch of the repository.
+
+        Tries to determine the default branch by:
+        1. Checking the remote HEAD (origin/HEAD)
+        2. Trying common branch names (main, master, develop)
+
+        Returns:
+            Default branch name or None if not found.
+        """
+        try:
+            # Method 1: Try to get the default branch from remote HEAD
+            try:
+                remote_head = self.repo.git.symbolic_ref("refs/remotes/origin/HEAD")
+                # Extract branch name from "refs/remotes/origin/main"
+                if remote_head:
+                    return remote_head.split('/')[-1]
+            except git.exc.GitCommandError:
+                pass
+
+            # Method 2: Try common branch names
+            common_branches = ['main', 'master', 'develop', 'development']
+            for branch in common_branches:
+                if self.branch_exists(branch):
+                    return branch
+
+            return None
+        except Exception:
+            return None
+
+    def branch_exists(self, branch_name: str) -> bool:
+        """
+        Check if a branch exists (local or remote).
+
+        Args:
+            branch_name: Branch name to check
+
+        Returns:
+            True if branch exists.
+        """
+        try:
+            # Check local branches
+            for ref in self.repo.refs:
+                if ref.name == branch_name:
+                    return True
+
+            # Check remote branches
+            try:
+                self.repo.git.rev_parse(f"origin/{branch_name}")
+                return True
+            except git.exc.GitCommandError:
+                pass
+
+            return False
+        except Exception:
+            return False
+
+    def get_available_branches(self) -> List[str]:
+        """
+        Get list of available branches (local and remote).
+
+        Returns:
+            List of branch names.
+        """
+        try:
+            branches = []
+
+            # Get local branches
+            for ref in self.repo.refs:
+                if not ref.name.startswith('origin/'):
+                    branches.append(ref.name)
+
+            # Get remote branches
+            try:
+                remote_refs = self.repo.git.branch('-r').strip().split('\n')
+                for ref in remote_refs:
+                    ref = ref.strip()
+                    if ref and not ref.startswith('origin/HEAD'):
+                        # Remove 'origin/' prefix
+                        branch = ref.replace('origin/', '')
+                        if branch not in branches:
+                            branches.append(branch)
+            except git.exc.GitCommandError:
+                pass
+
+            return sorted(branches)
+        except Exception:
+            return []
