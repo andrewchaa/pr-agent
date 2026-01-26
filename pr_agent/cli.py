@@ -348,6 +348,7 @@ def create(
                 git_ops=git_ops,
                 model=cfg.model,
                 max_diff_tokens=cfg.max_diff_tokens,
+                repo_path=str(git_ops.get_repository_root()),
             )
 
             # Generate title
@@ -361,7 +362,6 @@ def create(
             description = pr_generator.generate_description(
                 user_intent=user_intent,
                 base_branch=cfg.default_base_branch,
-                template_sections=cfg.template_sections,
             )
 
         # Display preview

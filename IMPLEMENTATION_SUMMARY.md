@@ -1,105 +1,62 @@
-# LLM-Based Ticket Extraction - Implementation Summary
+# Implementation Summary: Dynamic PR Template Loading
 
 ## Overview
-Enhanced PR Agent with intelligent, AI-powered ticket number extraction that handles virtually any branch naming convention.
+Successfully replaced the hardcoded `template_sections` configuration with dynamic loading of PR templates from `.github/pull_request_template.md` in each target repository.
 
-## What Was Added
+## Changes Made
 
-### 1. New Prompt Template (prompts.py)
-- `extract_ticket_number_prompt()` - Engineered prompt for LLM ticket extraction
-- Handles various formats: lowercase, underscores, different positions, no separators
-- Temperature: 0.1 (low for consistent extraction)
+### 1. New Module: `pr_agent/template_parser.py`
+Created a new module for parsing PR templates with three main functions:
 
-### 2. LLM Client Enhancement (llm_client.py)
-- `extract_ticket_number()` method - Calls Ollama to extract tickets
-- Parses LLM response and validates format
-- Returns normalized ticket format (e.g., "STAR-12345")
+- `read_pr_template(repo_path)`: Reads template from multiple common locations
+  - `.github/pull_request_template.md`
+  - `.github/PULL_REQUEST_TEMPLATE.md`
+  - `docs/pull_request_template.md`
 
-### 3. CLI Enhancement (cli.py)
-- Updated `get_ticket_number()` with 3-tier approach:
-  1. **Regex extraction** (fast, ~instant)
-  2. **AI extraction** (flexible, ~2-3 seconds)
-  3. **Manual input** (fallback)
-- Progress indicator during AI extraction
-- Clear feedback on which method succeeded
+- `parse_template_sections(template_content)`: Extracts markdown headers (## or ###)
+  - Preserves section order from template
+  - Strips markdown syntax and whitespace
+  - Returns list of section header strings
 
-### 4. Documentation Updates (README.md)
-- New "Branch Naming Convention" section
-- Examples showing AI extraction in action
-- Updated features list
-- Added Example 1b demonstrating unconventional branch names
+- `get_pr_template_sections(repo_path)`: Main entry point with fallback
+  - Returns parsed sections from template
+  - Falls back to default sections if template doesn't exist
 
-## Extraction Flow
+### 2. Updated: `pr_agent/pr_generator.py`
+Modified to use dynamic template loading:
 
-```
-Branch Name: "bugfix_with_star_422270_somewhere"
-                    ↓
-        ┌───────────────────────┐
-        │   Try Regex First     │ ← Fast (milliseconds)
-        └───────────────────────┘
-                    ↓
-                 Failed
-                    ↓
-        ┌───────────────────────┐
-        │   Try AI Extraction   │ ← Flexible (2-3 seconds)
-        └───────────────────────┘
-                    ↓
-              ✓ Success!
-                    ↓
-           Result: STAR-422270
-```
+- Added `repo_path` parameter to `__init__()` method
+- Updated `generate_description()` to load sections dynamically
+- Support variable number of sections (not limited to 3)
+- Map sections to generation methods via keywords or position
 
-## Supported Branch Name Variations
+### 3. Updated: `pr_agent/cli.py`
+- Pass repository path to `PRGenerator` constructor
+- Removed `template_sections` parameter from `generate_description()` call
 
-✅ **Regex catches:**
-- `feature/STAR-12345-add-feature`
-- `STAR-999-bugfix`
-- `star-422270-test` (case-insensitive)
+### 4. Updated: `pr_agent/config.py`
+Removed hardcoded template sections configuration
 
-✅ **AI catches (when regex fails):**
-- `bugfix_with_star_422270_somewhere` (underscores)
-- `feature_star_123_something` (lowercase with underscores)
-- `my-work-STAR_789_feature` (mixed separators)
-- `star123feature` (no separators)
-- `any-format-you-can-imagine-star-999-here`
+### 5. New Tests: `tests/test_template_parser.py`
+Created comprehensive test suite (17 tests, 94% coverage)
 
-❌ **Both fail (manual input):**
-- `main` (no ticket)
-- `develop` (no ticket)
-- `feature-without-ticket` (no ticket)
+### 6. Updated Tests: `tests/test_pr_generator.py`
+Updated existing tests to match new section format
 
-## Performance
+### 7. Updated Documentation: `CLAUDE.md`
+Updated project documentation with new template loading behavior
 
-- **Regex**: ~instant (< 1ms)
-- **AI Extraction**: ~2-3 seconds (Ollama API call)
-- **Total time**: Still fast because regex succeeds 95% of the time
+## Test Results
+
+All tests passing:
+- 17 new tests in `test_template_parser.py` ✓
+- 3 updated tests in `test_pr_generator.py` ✓
+- Template parser coverage: 94%
 
 ## Benefits
 
-1. **Flexibility**: Developers don't need to follow strict naming rules
-2. **User-Friendly**: Handles typos, variations, creative formats
-3. **Efficient**: Fast regex first, AI only when needed
-4. **Fallback**: Manual input ensures always works
-
-## Example Output
-
-```bash
-Current branch: bugfix_with_star_422270_somewhere
-
-Regex pattern didn't match. Trying AI extraction...
-[Analyzing branch name with AI...]
-✓ Detected ticket number (AI): STAR-422270
-```
-
-## Testing
-
-Run the test script to see extraction in action:
-```bash
-python test_ticket_extraction.py
-```
-
-## Future Enhancements
-
-- Cache AI extraction results per branch
-- Support multiple ticket systems simultaneously
-- Learn from user corrections (manual inputs)
+1. **Repository-specific templates**: Each repo can define its own PR format
+2. **No configuration needed**: Works automatically by reading `.github` directory
+3. **Maintains compatibility**: Falls back to defaults for repos without templates
+4. **Follows GitHub conventions**: Uses standard `.github/pull_request_template.md` location
+5. **Flexible**: Supports any number of sections

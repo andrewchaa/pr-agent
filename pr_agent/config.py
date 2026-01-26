@@ -9,9 +9,9 @@ Handles loading and merging configuration from multiple sources:
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 
 import yaml
 
@@ -34,13 +34,6 @@ class Config:
     # LLM settings
     max_diff_tokens: int = 8000
     temperature: float = 0.7
-
-    # PR template settings
-    template_sections: List[str] = field(default_factory=lambda: [
-        "Why are you making this change?",
-        "What are the possible impacts of your change to production?",
-        "Is there anything else PR reviewers should know about?",
-    ])
 
     # PR creation settings
     draft_pr: bool = False
@@ -89,19 +82,12 @@ class Config:
         Returns:
             Config instance.
         """
-        # Extract template sections if present
-        template_data = data.get("template", {})
-        if isinstance(template_data, dict):
-            sections = template_data.get("sections")
-            if sections:
-                data["template_sections"] = sections
-
         # Filter out unknown keys and nested structures
         valid_keys = {
             "model", "ollama_base_url", "ollama_timeout",
             "default_base_branch", "ticket_pattern",
             "max_diff_tokens", "temperature",
-            "template_sections", "draft_pr", "open_in_browser"
+            "draft_pr", "open_in_browser"
         }
 
         filtered_data = {k: v for k, v in data.items() if k in valid_keys}
@@ -174,13 +160,6 @@ class Config:
             "default_base_branch": "main",
             "ticket_pattern": "STAR-(\\d+)",
             "max_diff_tokens": 8000,
-            "template": {
-                "sections": [
-                    "Why are you making this change?",
-                    "What are the possible impacts of your change to production?",
-                    "Is there anything else PR reviewers should know about?",
-                ]
-            }
         }
 
         with open(path, 'w') as f:
@@ -216,7 +195,6 @@ class Config:
             ticket_pattern=self.ticket_pattern,
             max_diff_tokens=self.max_diff_tokens,
             temperature=self.temperature,
-            template_sections=self.template_sections.copy(),
             draft_pr=draft if draft is not None else self.draft_pr,
             open_in_browser=web if web is not None else self.open_in_browser,
         )
@@ -258,7 +236,7 @@ def load_config(
         file_config = Config.from_file(config_file)
         # Merge: file config takes precedence over env
         for attr in ["model", "ollama_base_url", "default_base_branch",
-                     "ticket_pattern", "max_diff_tokens", "template_sections"]:
+                     "ticket_pattern", "max_diff_tokens"]:
             file_value = getattr(file_config, attr)
             # Only use file value if it's not the default
             default_value = getattr(Config(), attr)

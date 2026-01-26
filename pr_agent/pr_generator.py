@@ -10,6 +10,7 @@ from typing import List, Optional, Dict
 from pr_agent.llm_client import OllamaClient
 from pr_agent.prompts import PRPrompts
 from pr_agent.git_operations import GitOperations
+from pr_agent.template_parser import get_pr_template_sections
 
 
 class PRGenerator:
@@ -21,6 +22,7 @@ class PRGenerator:
         git_ops: GitOperations,
         model: str = "qwen2.5:3b",
         max_diff_tokens: int = 8000,
+        repo_path: Optional[str] = None,
     ):
         """
         Initialize PR generator.
@@ -30,11 +32,13 @@ class PRGenerator:
             git_ops: Git operations handler
             model: Model name to use for generation
             max_diff_tokens: Maximum characters for diff context
+            repo_path: Path to repository root (used for template loading)
         """
         self.llm_client = llm_client
         self.git_ops = git_ops
         self.model = model
         self.max_diff_tokens = max_diff_tokens
+        self.repo_path = repo_path
         self.prompts = PRPrompts()
 
     def generate_title(
@@ -176,15 +180,16 @@ class PRGenerator:
         self,
         user_intent: str,
         base_branch: str = "main",
-        template_sections: Optional[List[str]] = None,
     ) -> str:
         """
         Generate complete PR description.
 
+        Dynamically loads template sections from .github/pull_request_template.md
+        if available, otherwise uses default sections.
+
         Args:
             user_intent: User's description of change purpose
             base_branch: Base branch for diff comparison
-            template_sections: Custom template sections (uses defaults if None)
 
         Returns:
             Formatted PR description with all sections.
@@ -204,31 +209,36 @@ class PRGenerator:
         if diff and len(diff) > self.max_diff_tokens:
             diff = diff[:self.max_diff_tokens] + "\n\n... (diff truncated)"
 
-        # Use default sections if not provided
-        if template_sections is None:
-            template_sections = [
-                "Why are you making this change?",
-                "What are the possible impacts of your change to production?",
-                "Is there anything else PR reviewers should know about?",
-            ]
+        # Load template sections dynamically from repository
+        if self.repo_path:
+            template_sections = get_pr_template_sections(self.repo_path)
+        else:
+            # Fallback to defaults if no repo path provided
+            from pr_agent.template_parser import DEFAULT_SECTIONS
+            template_sections = DEFAULT_SECTIONS.copy()
 
-        # Generate each section
+        # Generate content for each section
         sections: Dict[str, str] = {}
 
-        # Section 1: Why
-        sections["why"] = self.generate_why_section(
-            user_intent, changed_files, diff
-        )
+        for i, section in enumerate(template_sections):
+            # Map sections to generation methods based on keywords or position
+            section_lower = section.lower()
 
-        # Section 2: Impact
-        sections["impact"] = self.generate_impact_section(
-            changed_files, commit_messages, diff
-        )
-
-        # Section 3: Notes
-        sections["notes"] = self.generate_notes_section(
-            changed_files, diff
-        )
+            if "why" in section_lower or i == 0:
+                # First section or "why" keyword - explain the change
+                sections[f"section_{i}"] = self.generate_why_section(
+                    user_intent, changed_files, diff
+                )
+            elif "impact" in section_lower or i == 1:
+                # Second section or "impact" keyword - analyze impact
+                sections[f"section_{i}"] = self.generate_impact_section(
+                    changed_files, commit_messages, diff
+                )
+            else:
+                # Other sections - additional notes
+                sections[f"section_{i}"] = self.generate_notes_section(
+                    changed_files, diff
+                )
 
         # Format into final description
         return self.format_pr_body(sections, template_sections)
@@ -241,35 +251,35 @@ class PRGenerator:
         """
         Format sections into final PR body template.
 
+        Handles variable number of sections dynamically based on template.
+
         Args:
-            sections: Generated content for each section
-            template_sections: Section headers
+            sections: Generated content for each section (keyed by "section_N")
+            template_sections: Section headers from template
 
         Returns:
             Formatted PR description.
         """
         body_parts = []
 
-        # Section 1: Why
-        if len(template_sections) > 0:
-            body_parts.append(f"## {template_sections[0]}")
-            body_parts.append(sections.get("why", ""))
-            body_parts.append("")
+        # Iterate through all template sections
+        for i, section_header in enumerate(template_sections):
+            # Add section header
+            body_parts.append(f"## {section_header}")
 
-        # Section 2: Impact
-        if len(template_sections) > 1:
-            body_parts.append(f"## {template_sections[1]}")
-            body_parts.append(sections.get("impact", ""))
-            body_parts.append("")
+            # Get content for this section
+            content = sections.get(f"section_{i}", "")
 
-        # Section 3: Notes
-        if len(template_sections) > 2:
-            body_parts.append(f"## {template_sections[2]}")
-            notes = sections.get("notes", "")
-            if notes and notes.lower() != "no additional notes.":
-                body_parts.append(notes)
+            # For the last section, handle "no additional notes" case
+            if i == len(template_sections) - 1:
+                if content and content.lower() != "no additional notes.":
+                    body_parts.append(content)
+                else:
+                    body_parts.append("No additional notes.")
             else:
-                body_parts.append("No additional notes.")
+                body_parts.append(content)
+
+            # Add spacing between sections
             body_parts.append("")
 
         return "\n".join(body_parts).strip()
