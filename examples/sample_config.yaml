@@ -12,9 +12,6 @@ ticket_pattern: "STAR-(\\d+)"
 # LLM settings
 max_diff_tokens: 8000
 
-# PR template (customizable per repository)
-template:
-  sections:
-    - "Why are you making this change?"
-    - "What are the possible impacts of your change to production?"
-    - "Is there anything else PR reviewers should know about?"
+# Note: PR template sections are now loaded dynamically from
+# .github/pull_request_template.md in each repository.
+# The template.sections configuration has been removed.
