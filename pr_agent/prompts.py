@@ -11,9 +11,9 @@ from typing import List
 class PRPrompts:
     """Collection of prompts for PR description generation."""
 
-    SYSTEM_PROMPT = """You are a helpful assistant that writes clear, concise, and informative
-pull request descriptions. You analyze code changes and explain them in a way that helps
-code reviewers understand the purpose, impact, and context of the changes."""
+    SYSTEM_PROMPT = """You are a helpful assistant that writes clear, concise pull request descriptions.
+Be direct and brief. Avoid headers, numbered sections, or verbose explanations.
+Focus on practical information that helps reviewers understand the change quickly."""
 
     @staticmethod
     def extract_ticket_number_prompt(branch_name: str, ticket_prefix: str = "STAR") -> str:
@@ -106,19 +106,13 @@ Generate only the title, nothing else."""
         if len(changed_files) > 10:
             files_str += f"\n... and {len(changed_files) - 10} more files"
 
-        return f"""Based on the following information, explain why this change is being made.
+        return f"""Explain why this change is being made in 2-3 sentences.
 
-User's stated purpose: {user_intent}
+User's purpose: {user_intent}
+Files modified: {files_str}
 
-Files modified:
-{files_str}
-
-Write a clear, concise explanation (2-4 sentences) that answers:
-1. What problem does this solve or what feature does it add?
-2. Why is this change necessary or valuable?
-
-Be specific and focus on the business or technical value. Avoid repeating obvious information
-from the code changes. Write from a developer's perspective explaining to reviewers."""
+Focus on: What problem this solves and why it's needed.
+Be direct and concise. No headers, bullet points, or extra formatting."""
 
     @staticmethod
     def generate_impact_prompt(changed_files: List[str], commit_messages: List[str]) -> str:
@@ -140,21 +134,16 @@ from the code changes. Write from a developer's perspective explaining to review
         if commit_messages:
             commits_str = "Commits:\n" + "\n".join(f"- {msg}" for msg in commit_messages[:5])
 
-        return f"""Analyze the potential production impacts of this change.
+        return f"""List the potential production impacts of this change.
 
 Files modified:
 {files_str}
 
 {commits_str}
 
-Consider and briefly describe:
-1. What parts of the system could be affected?
-2. Are there any performance, security, or data implications?
-3. What should QA or reviewers test specifically?
-4. Any backwards compatibility concerns?
-
-Be practical and focus on real risks, not theoretical ones. If the change is low-risk,
-it's fine to say so. Write 2-5 concise bullet points."""
+Provide 2-4 brief bullet points covering real risks (performance, security, compatibility, areas to test).
+If low-risk, say so. Be practical, not theoretical.
+NO headers, numbered lists, or summary sections - just simple bullet points."""
 
     @staticmethod
     def generate_notes_prompt(changed_files: List[str], diff_summary: str) -> str:
@@ -170,7 +159,7 @@ it's fine to say so. Write 2-5 concise bullet points."""
         """
         files_str = "\n".join(f"- {f}" for f in changed_files[:10])
 
-        return f"""Based on this change, identify anything important that code reviewers should know.
+        return f"""List anything important for reviewers (dependencies, config changes, migrations, special review areas).
 
 Files modified:
 {files_str}
@@ -178,17 +167,8 @@ Files modified:
 Change summary:
 {diff_summary}
 
-Consider mentioning (if applicable):
-- Dependencies on other PRs or changes
-- Configuration changes needed
-- Database migrations or data changes
-- New dependencies or libraries introduced
-- Areas that need special attention during review
-- Known limitations or follow-up work planned
-- Any assumptions or design decisions made
-
-If there's nothing notable, respond with "No additional notes."
-Otherwise, provide 1-4 concise bullet points."""
+If nothing notable: "No additional notes."
+Otherwise: 1-3 brief bullet points. No headers or extra formatting."""
 
     @staticmethod
     def extract_diff_summary(diff: str, max_length: int = 1000) -> str:

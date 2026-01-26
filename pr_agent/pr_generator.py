@@ -266,6 +266,7 @@ class PRGenerator:
         for i, section_header in enumerate(template_sections):
             # Add section header
             body_parts.append(f"## {section_header}")
+            body_parts.append("")  # Blank line after header
 
             # Get content for this section
             content = sections.get(f"section_{i}", "")
