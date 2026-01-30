@@ -190,6 +190,44 @@ class GitOperations:
         """
         return self.repo.is_dirty()
 
+    def get_uncommitted_diff(self) -> str:
+        """
+        Get the diff of uncommitted changes.
+
+        Returns:
+            Diff of both staged and unstaged changes.
+        """
+        return self.repo.git.diff('HEAD')
+
+    def stage_all_changes(self) -> None:
+        """
+        Stage all changes (git add -A).
+
+        Raises:
+            GitError: If staging fails.
+        """
+        from pr_agent.exceptions import GitError
+        try:
+            self.repo.git.add('-A')
+        except git.exc.GitCommandError as e:
+            raise GitError(f"Failed to stage changes: {e}")
+
+    def create_commit(self, message: str) -> None:
+        """
+        Create a commit with the given message.
+
+        Args:
+            message: Commit message
+
+        Raises:
+            GitError: If commit fails.
+        """
+        from pr_agent.exceptions import GitError
+        try:
+            self.repo.index.commit(message)
+        except git.exc.GitCommandError as e:
+            raise GitError(f"Failed to create commit: {e}")
+
     def has_commits_ahead(self, base_branch: str = "main") -> bool:
         """
         Check if current branch has commits ahead of base branch.

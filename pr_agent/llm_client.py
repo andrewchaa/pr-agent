@@ -210,3 +210,41 @@ class OllamaClient:
             return match.group(0)
 
         return None
+
+    def generate_commit_message(
+        self,
+        ticket_number: str,
+        changed_files: list,
+        diff: str,
+        model: str = "qwen2.5:3b",
+    ) -> str:
+        """
+        Generate a commit message from uncommitted changes.
+
+        Args:
+            ticket_number: Ticket identifier (e.g., "STAR-41789")
+            changed_files: List of modified files
+            diff: Git diff of uncommitted changes
+            model: Model name to use
+
+        Returns:
+            Generated commit message in format: "TICKET-NUMBER: description"
+        """
+        from pr_agent.prompts import PRPrompts
+
+        # Truncate diff for token limits
+        diff_summary = PRPrompts.extract_diff_summary(diff, max_length=2000)
+
+        prompt = PRPrompts.generate_commit_message_prompt(
+            ticket_number=ticket_number,
+            changed_files=changed_files,
+            diff_summary=diff_summary,
+        )
+
+        response = self.generate(
+            prompt=prompt,
+            model=model,
+            temperature=0.3,  # Moderately low for consistency
+        )
+
+        return response.strip()

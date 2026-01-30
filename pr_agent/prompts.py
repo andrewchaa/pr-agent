@@ -91,6 +91,50 @@ Examples:
 Generate only the title, nothing else."""
 
     @staticmethod
+    def generate_commit_message_prompt(
+        ticket_number: str,
+        changed_files: List[str],
+        diff_summary: str
+    ) -> str:
+        """
+        Generate prompt for commit message creation.
+
+        Args:
+            ticket_number: Ticket identifier (e.g., "STAR-41789")
+            changed_files: List of modified files
+            diff_summary: Summary of the diff
+
+        Returns:
+            Prompt for commit message generation.
+        """
+        files_str = "\n".join(f"- {f}" for f in changed_files[:10])
+        if len(changed_files) > 10:
+            files_str += f"\n... and {len(changed_files) - 10} more files"
+
+        return f"""Generate a concise git commit message following this format: "{ticket_number}: <description>"
+
+Files changed:
+{files_str}
+
+Changes summary:
+{diff_summary[:1000]}
+
+Requirements:
+- Start with the ticket number: {ticket_number}
+- Follow with a colon and space
+- Write a clear, actionable description (3-8 words)
+- Use imperative mood (e.g., "Add", "Fix", "Update", not "Added", "Fixed", "Updated")
+- Be specific but concise
+- Focus on WHAT changed, not WHY
+
+Examples:
+- STAR-123: Add user authentication middleware
+- STAR-456: Fix memory leak in data processor
+- STAR-789: Update error handling in API routes
+
+Generate only the commit message, nothing else."""
+
+    @staticmethod
     def generate_why_prompt(user_intent: str, changed_files: List[str]) -> str:
         """
         Generate prompt for "Why are you making this change?" section.
