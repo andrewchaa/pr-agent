@@ -27,6 +27,8 @@ from pr_agent.exceptions import (
     OllamaNotAvailableError,
     ModelNotFoundError,
     NoChangesError,
+    GitError,
+    LLMError,
 )
 
 console = Console()
@@ -308,12 +310,60 @@ def create(
         # Check for uncommitted changes
         if git_ops.has_uncommitted_changes():
             console.print(
-                "[yellow]Warning: You have uncommitted changes. "
-                "These will not be included in the PR.[/yellow]"
+                "[yellow]You have uncommitted changes.[/yellow]"
             )
-            if not Confirm.ask("Continue anyway?", default=False):
-                console.print("[red]Aborted.[/red]")
-                sys.exit(0)
+            console.print()
+
+            # Offer to commit changes
+            if Confirm.ask("Would you like me to commit these changes?", default=True):
+                try:
+                    # Get uncommitted changes info
+                    diff = git_ops.get_uncommitted_diff()
+                    changed_files = git_ops.repo.git.diff('HEAD', name_only=True).strip().split('\n')
+                    changed_files = [f for f in changed_files if f]  # Filter empty
+
+                    if not changed_files:
+                        console.print("[yellow]No files to commit.[/yellow]")
+                    else:
+                        # Generate commit message
+                        console.print()
+                        with console.status("[bold cyan]Generating commit message with AI...[/bold cyan]"):
+                            commit_message = llm_client.generate_commit_message(
+                                ticket_number=ticket_number,
+                                changed_files=changed_files,
+                                diff=diff,
+                                model=cfg.model,
+                            )
+
+                        # Display and confirm
+                        console.print()
+                        console.print("[cyan]Suggested commit message:[/cyan]")
+                        console.print(f"  {commit_message}")
+                        console.print()
+
+                        if Confirm.ask("Use this commit message?", default=True):
+                            with console.status("[bold green]Committing changes...[/bold green]"):
+                                git_ops.stage_all_changes()
+                                git_ops.create_commit(commit_message)
+                            console.print("[green]✓ Changes committed successfully[/green]")
+                            console.print()
+                        else:
+                            # User rejected message, ask if they want to continue without committing
+                            console.print("[yellow]Commit cancelled.[/yellow]")
+                            if not Confirm.ask("Continue without committing?", default=False):
+                                console.print("[red]Aborted.[/red]")
+                                sys.exit(0)
+                except (GitError, LLMError) as e:
+                    console.print(f"[red]Error during auto-commit: {e}[/red]")
+                    console.print()
+                    if not Confirm.ask("Continue without committing?", default=False):
+                        console.print("[red]Aborted.[/red]")
+                        sys.exit(0)
+            else:
+                # User doesn't want to commit
+                if not Confirm.ask("Continue without committing?", default=False):
+                    console.print("[red]Aborted.[/red]")
+                    sys.exit(0)
 
         # Check if there are commits to create PR for
         commit_count = git_ops.get_commit_count(cfg.default_base_branch)
