@@ -185,9 +185,25 @@ Files modified:
 
 {commits_str}
 
-Provide 2-4 brief bullet points covering real risks (performance, security, compatibility, areas to test).
-If low-risk, say so. Be practical, not theoretical.
-NO headers, numbered lists, or summary sections - just simple bullet points."""
+Requirements:
+- Only list REAL, concrete production impacts (performance degradation, breaking changes, data loss risk, etc.)
+- Do NOT mention risks that are "minimal", "unlikely", or "low" - if a risk is minimal, skip it entirely
+- Do NOT include generic "testing needed" points - assume all changes need testing
+- Do NOT list theoretical risks that apply to any code change
+- If truly low-risk: say "Low-risk change" or "No significant production impact expected"
+- Be specific and actionable, not vague
+- Use 1-3 bullet points only for REAL risks
+
+Examples of GOOD impact statements:
+- Breaking change: Removes deprecated API endpoint used by mobile app
+- Performance: Database migration will lock table for ~5 minutes
+
+Examples of BAD impact statements (DO NOT write these):
+- Testing needed: Verify that changes don't break workflows
+- Security risk: Could introduce vulnerabilities, though likely minimal
+- Compatibility concern: Might affect existing configurations
+
+NO headers, numbered lists, or summary sections - just simple bullet points or a single statement."""
 
     @staticmethod
     def generate_notes_prompt(changed_files: List[str], diff_summary: str) -> str:
