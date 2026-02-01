@@ -7,7 +7,7 @@ using git information and user input.
 
 from typing import List, Optional, Dict
 
-from pr_agent.llm_client import OllamaClient
+from pr_agent.llm_client import CopilotClient
 from pr_agent.prompts import PRPrompts
 from pr_agent.git_operations import GitOperations
 from pr_agent.template_parser import get_pr_template_sections
@@ -18,9 +18,9 @@ class PRGenerator:
 
     def __init__(
         self,
-        llm_client: OllamaClient,
+        llm_client: CopilotClient,
         git_ops: GitOperations,
-        model: str = "qwen2.5:3b",
+        model: str = "claude-haiku-4.5",
         max_diff_tokens: int = 8000,
         repo_path: Optional[str] = None,
     ):
@@ -28,9 +28,9 @@ class PRGenerator:
         Initialize PR generator.
 
         Args:
-            llm_client: Ollama client for LLM interactions
+            llm_client: Copilot client for LLM interactions
             git_ops: Git operations handler
-            model: Model name to use for generation
+            model: Model name (for compatibility, uses Copilot's claude-haiku-4.5)
             max_diff_tokens: Maximum characters for diff context
             repo_path: Path to repository root (used for template loading)
         """
@@ -53,20 +53,17 @@ class PRGenerator:
         Args:
             ticket_number: Ticket identifier (e.g., "STAR-12345")
             branch_name: Current branch name
-            user_intent: User's description of the change purpose
+             user_intent: User's description of the change purpose
 
-        Returns:
-            Generated PR title in format: "STAR-XXX: Description"
+         Returns:
+             Generated PR title in format: "STAR-XXX: Description"
         """
-        prompt = self.prompts.generate_title_prompt(
-            ticket_number, branch_name, user_intent
-        )
+        prompt = self.prompts.generate_title_prompt(ticket_number, branch_name, user_intent)
 
         title = self.llm_client.generate(
             prompt=prompt,
-            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
-            temperature=0.5,  # Lower temperature for more consistent titles
+            temperature=0.5,
         )
 
         # Ensure title starts with ticket number
@@ -99,14 +96,12 @@ class PRGenerator:
         """
         prompt = self.prompts.generate_why_prompt(user_intent, changed_files)
 
-        # Add diff context if available and not too large
         if diff and len(diff) < self.max_diff_tokens:
             diff_summary = self.prompts.extract_diff_summary(diff, 1500)
             prompt += f"\n\nCode changes (summary):\n{diff_summary}"
 
         response = self.llm_client.generate(
             prompt=prompt,
-            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=0.7,
         )
@@ -132,14 +127,12 @@ class PRGenerator:
         """
         prompt = self.prompts.generate_impact_prompt(changed_files, commit_messages)
 
-        # Add limited diff context
         if diff:
             diff_summary = self.prompts.extract_diff_summary(diff, 1000)
             prompt += f"\n\nCode changes (summary):\n{diff_summary}"
 
         response = self.llm_client.generate(
             prompt=prompt,
-            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=0.7,
         )
@@ -158,7 +151,7 @@ class PRGenerator:
             changed_files: List of modified files
             diff: Optional git diff for additional context
 
-        Returns:
+         Returns:
             Generated notes text.
         """
         diff_summary = ""
@@ -169,7 +162,6 @@ class PRGenerator:
 
         response = self.llm_client.generate(
             prompt=prompt,
-            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=0.7,
         )
@@ -207,7 +199,7 @@ class PRGenerator:
 
         # Truncate diff if too large
         if diff and len(diff) > self.max_diff_tokens:
-            diff = diff[:self.max_diff_tokens] + "\n\n... (diff truncated)"
+            diff = diff[: self.max_diff_tokens] + "\n\n... (diff truncated)"
 
         # Load template sections dynamically from repository
         if self.repo_path:
@@ -215,6 +207,7 @@ class PRGenerator:
         else:
             # Fallback to defaults if no repo path provided
             from pr_agent.template_parser import DEFAULT_SECTIONS
+
             template_sections = DEFAULT_SECTIONS.copy()
 
         # Generate content for each section
@@ -236,9 +229,7 @@ class PRGenerator:
                 )
             else:
                 # Other sections - additional notes
-                sections[f"section_{i}"] = self.generate_notes_section(
-                    changed_files, diff
-                )
+                sections[f"section_{i}"] = self.generate_notes_section(changed_files, diff)
 
         # Format into final description
         return self.format_pr_body(sections, template_sections)

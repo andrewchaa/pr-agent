@@ -2,8 +2,14 @@
 # Copy this to ~/.config/pr-agent/config.yaml and customize
 
 # Model settings
-model: "qwen2.5:3b"
-ollama_base_url: "http://localhost:11434"
+model: "claude-haiku-4.5"
+copilot_api_base: "https://api.githubcopilot.com"
+copilot_timeout: 60
+
+# API Authentication (optional)
+# By default, pr-agent uses your GitHub CLI authentication (gh auth login)
+# Only uncomment this if you want to use a different token:
+# copilot_api_key: "your-github-token-here"
 
 # Git settings
 default_base_branch: "main"
