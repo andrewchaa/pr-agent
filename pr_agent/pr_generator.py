@@ -99,6 +99,7 @@ class PRGenerator:
         user_intent: str,
         changed_files: List[str],
         diff: Optional[str] = None,
+        feedback_history: Optional[List[str]] = None,
     ) -> str:
         """
         Generate "Why are you making this change?" section.
@@ -107,11 +108,13 @@ class PRGenerator:
             user_intent: User's description of change purpose
             changed_files: List of modified files
             diff: Optional git diff for additional context
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Generated explanation text.
         """
-        prompt = self.prompts.generate_why_prompt(user_intent, changed_files)
+        feedback_history = feedback_history or []
+        prompt = self.prompts.generate_why_prompt(user_intent, changed_files, feedback_history)
 
         if diff and len(diff) < self.max_diff_tokens:
             diff_summary = self.prompts.extract_diff_summary(diff, WHY_DIFF_LIMIT)
@@ -131,6 +134,7 @@ class PRGenerator:
         changed_files: List[str],
         commit_messages: List[str],
         diff: Optional[str] = None,
+        feedback_history: Optional[List[str]] = None,
     ) -> str:
         """
         Generate "What are the possible impacts?" section.
@@ -139,11 +143,13 @@ class PRGenerator:
             changed_files: List of modified files
             commit_messages: List of commit messages
             diff: Optional git diff for additional context
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Generated impact analysis text.
         """
-        prompt = self.prompts.generate_impact_prompt(changed_files, commit_messages)
+        feedback_history = feedback_history or []
+        prompt = self.prompts.generate_impact_prompt(changed_files, commit_messages, feedback_history)
 
         if diff:
             diff_summary = self.prompts.extract_diff_summary(diff, IMPACT_DIFF_LIMIT)
@@ -162,6 +168,7 @@ class PRGenerator:
         self,
         changed_files: List[str],
         diff: Optional[str] = None,
+        feedback_history: Optional[List[str]] = None,
     ) -> str:
         """
         Generate "Anything else reviewers should know?" section.
@@ -169,15 +176,17 @@ class PRGenerator:
         Args:
             changed_files: List of modified files
             diff: Optional git diff for additional context
+            feedback_history: Optional list of user feedback from previous iterations
 
          Returns:
             Generated notes text.
         """
+        feedback_history = feedback_history or []
         diff_summary = ""
         if diff:
             diff_summary = self.prompts.extract_diff_summary(diff, NOTES_DIFF_LIMIT)
 
-        prompt = self.prompts.generate_notes_prompt(changed_files, diff_summary)
+        prompt = self.prompts.generate_notes_prompt(changed_files, diff_summary, feedback_history)
 
         response = self.llm_client.generate(
             prompt=prompt,
@@ -192,6 +201,7 @@ class PRGenerator:
         self,
         user_intent: str,
         base_branch: str = "main",
+        feedback_history: Optional[List[str]] = None,
     ) -> str:
         """
         Generate complete PR description.
@@ -202,10 +212,13 @@ class PRGenerator:
         Args:
             user_intent: User's description of change purpose
             base_branch: Base branch for diff comparison
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Formatted PR description with all sections.
         """
+        feedback_history = feedback_history or []
+
         # Get git information
         changed_files = self.git_ops.get_changed_files(base_branch)
         commit_messages = self.git_ops.get_commit_messages(base_branch)
@@ -240,16 +253,18 @@ class PRGenerator:
             if "why" in section_lower or i == 0:
                 # First section or "why" keyword - explain the change
                 sections[f"section_{i}"] = self.generate_why_section(
-                    user_intent, changed_files, diff
+                    user_intent, changed_files, diff, feedback_history
                 )
             elif "impact" in section_lower or i == 1:
                 # Second section or "impact" keyword - analyze impact
                 sections[f"section_{i}"] = self.generate_impact_section(
-                    changed_files, commit_messages, diff
+                    changed_files, commit_messages, diff, feedback_history
                 )
             else:
                 # Other sections - additional notes
-                sections[f"section_{i}"] = self.generate_notes_section(changed_files, diff)
+                sections[f"section_{i}"] = self.generate_notes_section(
+                    changed_files, diff, feedback_history
+                )
 
         # Format into final description
         return self.format_pr_body(sections, template_sections)

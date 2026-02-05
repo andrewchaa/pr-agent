@@ -380,21 +380,61 @@ def create(
                 repo_path=str(git_ops.get_repository_root()),
             )
 
-            # Generate title
+            # Generate title (once, outside loop)
             title = pr_generator.generate_title(
                 ticket_number=ticket_number,
                 branch_name=branch_name,
                 user_intent=user_intent,
             )
 
-            # Generate description
-            description = pr_generator.generate_description(
-                user_intent=user_intent,
-                base_branch=cfg.default_base_branch,
-            )
+        # Generate description with regeneration loop
+        feedback_history = []
+        max_iterations = 5  # Prevent infinite loops
+        iteration = 0
 
-        # Display preview
-        display_preview(title, description, cfg.default_base_branch)
+        while iteration < max_iterations:
+            iteration += 1
+
+            # Generate or regenerate description
+            if feedback_history:
+                console.print(f"\n[cyan]Regenerating description (attempt {iteration})...[/cyan]")
+                with console.status("[bold green]Regenerating with your feedback...[/bold green]"):
+                    description = pr_generator.generate_description(
+                        user_intent=user_intent,
+                        base_branch=cfg.default_base_branch,
+                        feedback_history=feedback_history,
+                    )
+            else:
+                description = pr_generator.generate_description(
+                    user_intent=user_intent,
+                    base_branch=cfg.default_base_branch,
+                )
+
+            # Display preview
+            display_preview(title, description, cfg.default_base_branch)
+
+            # Description approval checkpoint
+            if Confirm.ask("Are you happy with the description?", default=True):
+                # User approved - break out of loop
+                break
+            else:
+                # User rejected - collect feedback
+                console.print("\n[yellow]Let's improve the description.[/yellow]")
+                feedback = Prompt.ask(
+                    "What would you like to change? (or type 'exit' to quit)",
+                    default=""
+                )
+
+                if feedback.lower() in ['exit', 'quit', 'cancel', '']:
+                    console.print("[yellow]Description regeneration cancelled. Exiting.[/yellow]")
+                    sys.exit(0)
+
+                feedback_history.append(feedback)
+
+                # Check if we've hit max iterations
+                if iteration >= max_iterations:
+                    console.print(f"[yellow]Reached maximum regeneration attempts ({max_iterations}). Using current version.[/yellow]")
+                    break
 
         # Dry run mode - exit here
         if dry_run:

@@ -1,62 +1,105 @@
-# Implementation Summary: Dynamic PR Template Loading
+# PR Description Regeneration Feature - Implementation Summary
 
 ## Overview
-Successfully replaced the hardcoded `template_sections` configuration with dynamic loading of PR templates from `.github/pull_request_template.md` in each target repository.
+
+Successfully implemented an interactive regeneration loop that allows users to provide feedback and regenerate PR descriptions until they're satisfied with the result.
 
 ## Changes Made
 
-### 1. New Module: `pr_agent/template_parser.py`
-Created a new module for parsing PR templates with three main functions:
+### 1. `/pr_agent/cli.py` (56 lines changed)
 
-- `read_pr_template(repo_path)`: Reads template from multiple common locations
-  - `.github/pull_request_template.md`
-  - `.github/PULL_REQUEST_TEMPLATE.md`
-  - `docs/pull_request_template.md`
+**Key Changes:**
+- Replaced simple "accept/reject" checkpoint with a regeneration loop (lines 390-437)
+- Added `feedback_history` list to track all user feedback across iterations
+- Added `max_iterations = 5` safety limit to prevent infinite loops
+- Modified flow to:
+  1. Generate title once (outside loop)
+  2. Enter loop: generate/regenerate description → preview → collect feedback
+  3. Break on approval or exit command
+  4. Continue to PR creation after approval
 
-- `parse_template_sections(template_content)`: Extracts markdown headers (## or ###)
-  - Preserves section order from template
-  - Strips markdown syntax and whitespace
-  - Returns list of section header strings
+**User Experience Improvements:**
+- Users can now provide specific feedback (e.g., "Make the impact section more detailed")
+- Supports multiple iterations of refinement
+- Graceful exit options: 'exit', 'quit', 'cancel', or empty input
+- Clear status messages during regeneration
 
-- `get_pr_template_sections(repo_path)`: Main entry point with fallback
-  - Returns parsed sections from template
-  - Falls back to default sections if template doesn't exist
+### 2. `/pr_agent/pr_generator.py` (27 lines changed)
 
-### 2. Updated: `pr_agent/pr_generator.py`
-Modified to use dynamic template loading:
+**Key Changes:**
+- Added `feedback_history: Optional[List[str]]` parameter to:
+  - `generate_description()` (line 195)
+  - `generate_why_section()` (line 102)
+  - `generate_impact_section()` (line 134)
+  - `generate_notes_section()` (line 166)
+- All methods now pass feedback through to their respective prompt generators
+- Maintains backward compatibility (feedback defaults to empty list)
 
-- Added `repo_path` parameter to `__init__()` method
-- Updated `generate_description()` to load sections dynamically
-- Support variable number of sections (not limited to 3)
-- Map sections to generation methods via keywords or position
+### 3. `/pr_agent/prompts.py` (72 lines changed)
 
-### 3. Updated: `pr_agent/cli.py`
-- Pass repository path to `PRGenerator` constructor
-- Removed `template_sections` parameter from `generate_description()` call
+**Key Changes:**
+- Added `feedback_history: List[str] | None = None` parameter to:
+  - `generate_why_prompt()` (line 141)
+  - `generate_impact_prompt()` (line 185)
+  - `generate_notes_prompt()` (line 283)
+- Each prompt method now appends feedback section when feedback exists
 
-### 4. Updated: `pr_agent/config.py`
-Removed hardcoded template sections configuration
+## User Flow Examples
 
-### 5. New Tests: `tests/test_template_parser.py`
-Created comprehensive test suite (17 tests, 94% coverage)
+### Happy Path (Immediate Approval)
+```
+✓ Generated title and description
+✓ [Preview displayed]
+? Are you happy with the description? (Y/n): y
+? Create this pull request? (Y/n): y
+✓ PR created successfully
+```
 
-### 6. Updated Tests: `tests/test_pr_generator.py`
-Updated existing tests to match new section format
+### Regeneration Path (With Feedback)
+```
+✓ Generated title and description
+✓ [Preview displayed]
+? Are you happy with the description? (Y/n): n
 
-### 7. Updated Documentation: `CLAUDE.md`
-Updated project documentation with new template loading behavior
+Let's improve the description.
+? What would you like to change? Make the impact section more detailed
 
-## Test Results
+Regenerating description (attempt 2)...
+✓ [New preview displayed]
+? Are you happy with the description? (Y/n): y
+? Create this pull request? (Y/n): y
+✓ PR created successfully
+```
 
-All tests passing:
-- 17 new tests in `test_template_parser.py` ✓
-- 3 updated tests in `test_pr_generator.py` ✓
-- Template parser coverage: 94%
+## Testing
 
-## Benefits
+### Automated Tests
+- All existing tests pass (25/25 relevant tests)
+- 3 pre-existing failures unrelated to this feature (LLM client initialization)
 
-1. **Repository-specific templates**: Each repo can define its own PR format
-2. **No configuration needed**: Works automatically by reading `.github` directory
-3. **Maintains compatibility**: Falls back to defaults for repos without templates
-4. **Follows GitHub conventions**: Uses standard `.github/pull_request_template.md` location
-5. **Flexible**: Supports any number of sections
+### Manual Verification
+- Created and ran signature tests - all passed ✓
+- Created and ran integration tests - all passed ✓
+- Verified feedback flows correctly from CLI → PR Generator → Prompts
+
+## Files Changed Summary
+```
+pr_agent/cli.py          | 56 lines (+50, -6)
+pr_agent/pr_generator.py | 27 lines (+23, -4)
+pr_agent/prompts.py      | 72 lines (+68, -4)
+-----------------------------------------
+Total                    | 155 lines (+141, -14)
+```
+
+## Success Criteria ✓
+
+All goals from the implementation plan achieved:
+
+- ✓ Users can provide feedback and regenerate descriptions
+- ✓ Feedback is incorporated into LLM prompts
+- ✓ Multiple iterations supported (up to 5)
+- ✓ Graceful exit options provided
+- ✓ Backward compatibility maintained
+- ✓ No breaking changes to existing code
+- ✓ Clean code organization and separation of concerns
+- ✓ Type hints and documentation added

@@ -135,22 +135,28 @@ Examples:
 Generate only the commit message, nothing else."""
 
     @staticmethod
-    def generate_why_prompt(user_intent: str, changed_files: List[str]) -> str:
+    def generate_why_prompt(
+        user_intent: str,
+        changed_files: List[str],
+        feedback_history: List[str] | None = None,
+    ) -> str:
         """
         Generate prompt for "Why are you making this change?" section.
 
         Args:
             user_intent: User's description of the change purpose
             changed_files: List of modified files
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Prompt for why section.
         """
+        feedback_history = feedback_history or []
         files_str = "\n".join(f"- {f}" for f in changed_files[:10])  # Limit to 10 files
         if len(changed_files) > 10:
             files_str += f"\n... and {len(changed_files) - 10} more files"
 
-        return f"""Explain why this change is being made in 1-2 concise sentences (max 50 words total).
+        prompt = f"""Explain why this change is being made in 1-2 concise sentences (max 50 words total).
 
 User's purpose: {user_intent}
 Files modified: {files_str}
@@ -158,18 +164,38 @@ Files modified: {files_str}
 Focus on: What problem this solves and why it's needed.
 Be direct and concise. No headers, bullet points, or extra formatting."""
 
+        # Append feedback if this is a regeneration
+        if feedback_history:
+            feedback_str = "\n".join(f"{i+1}. {fb}" for i, fb in enumerate(feedback_history))
+            prompt += f"""
+
+**IMPORTANT - User Feedback on Previous Versions:**
+The user reviewed previous versions and provided this feedback:
+{feedback_str}
+
+Please regenerate the description incorporating all of the above feedback points.
+Focus on addressing each piece of feedback while maintaining the overall structure and quality."""
+
+        return prompt
+
     @staticmethod
-    def generate_impact_prompt(changed_files: List[str], commit_messages: List[str]) -> str:
+    def generate_impact_prompt(
+        changed_files: List[str],
+        commit_messages: List[str],
+        feedback_history: List[str] | None = None,
+    ) -> str:
         """
         Generate prompt for "What are the possible impacts?" section.
 
         Args:
             changed_files: List of modified files
             commit_messages: List of commit messages
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Prompt for impact section.
         """
+        feedback_history = feedback_history or []
         files_str = "\n".join(f"- {f}" for f in changed_files[:15])
         if len(changed_files) > 15:
             files_str += f"\n... and {len(changed_files) - 15} more files"
@@ -178,7 +204,7 @@ Be direct and concise. No headers, bullet points, or extra formatting."""
         if commit_messages:
             commits_str = "Commits:\n" + "\n".join(f"- {msg}" for msg in commit_messages[:5])
 
-        return f"""List the potential production impacts of this change.
+        prompt = f"""List the potential production impacts of this change.
 
 Files modified:
 {files_str}
@@ -207,21 +233,41 @@ Examples of BAD impact statements (DO NOT write these):
 
 NO headers, numbered lists, or summary sections - just simple bullet points or a single statement."""
 
+        # Append feedback if this is a regeneration
+        if feedback_history:
+            feedback_str = "\n".join(f"{i+1}. {fb}" for i, fb in enumerate(feedback_history))
+            prompt += f"""
+
+**IMPORTANT - User Feedback on Previous Versions:**
+The user reviewed previous versions and provided this feedback:
+{feedback_str}
+
+Please regenerate the description incorporating all of the above feedback points.
+Focus on addressing each piece of feedback while maintaining the overall structure and quality."""
+
+        return prompt
+
     @staticmethod
-    def generate_notes_prompt(changed_files: List[str], diff_summary: str) -> str:
+    def generate_notes_prompt(
+        changed_files: List[str],
+        diff_summary: str,
+        feedback_history: List[str] | None = None,
+    ) -> str:
         """
         Generate prompt for "Anything else reviewers should know?" section.
 
         Args:
             changed_files: List of modified files
             diff_summary: Summary or excerpt of the diff
+            feedback_history: Optional list of user feedback from previous iterations
 
         Returns:
             Prompt for notes section.
         """
+        feedback_history = feedback_history or []
         files_str = "\n".join(f"- {f}" for f in changed_files[:10])
 
-        return f"""List anything important for reviewers that was NOT already mentioned in the Impact section above.
+        prompt = f"""List anything important for reviewers that was NOT already mentioned in the Impact section above.
 
 Focus on: dependencies, config changes, migrations, tricky review areas.
 
@@ -238,6 +284,20 @@ Change summary:
 {diff_summary}
 
 No headers or extra formatting."""
+
+        # Append feedback if this is a regeneration
+        if feedback_history:
+            feedback_str = "\n".join(f"{i+1}. {fb}" for i, fb in enumerate(feedback_history))
+            prompt += f"""
+
+**IMPORTANT - User Feedback on Previous Versions:**
+The user reviewed previous versions and provided this feedback:
+{feedback_str}
+
+Please regenerate the description incorporating all of the above feedback points.
+Focus on addressing each piece of feedback while maintaining the overall structure and quality."""
+
+        return prompt
 
     @staticmethod
     def extract_diff_summary(diff: str, max_length: int = 1000) -> str:
