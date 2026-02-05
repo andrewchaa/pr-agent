@@ -81,6 +81,7 @@ class CopilotClient:
         prompt: str,
         system: Optional[str] = None,
         temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
     ) -> str:
         messages = []
         if system:
@@ -92,6 +93,9 @@ class CopilotClient:
             "temperature": temperature,
             "messages": messages,
         }
+
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
 
         data = self._post(payload)
 

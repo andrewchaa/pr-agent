@@ -150,7 +150,7 @@ Generate only the commit message, nothing else."""
         if len(changed_files) > 10:
             files_str += f"\n... and {len(changed_files) - 10} more files"
 
-        return f"""Explain why this change is being made in 2-3 sentences.
+        return f"""Explain why this change is being made in 1-2 concise sentences (max 50 words total).
 
 User's purpose: {user_intent}
 Files modified: {files_str}
@@ -186,13 +186,15 @@ Files modified:
 {commits_str}
 
 Requirements:
+- Keep total response under 25 words
+- Use 1-2 bullet points maximum, or a single concise statement
+- Every word must add value - remove adjectives and filler phrases
 - Only list REAL, concrete production impacts (performance degradation, breaking changes, data loss risk, etc.)
 - Do NOT mention risks that are "minimal", "unlikely", or "low" - if a risk is minimal, skip it entirely
 - Do NOT include generic "testing needed" points - assume all changes need testing
 - Do NOT list theoretical risks that apply to any code change
 - If truly low-risk: say "Low-risk change" or "No significant production impact expected"
 - Be specific and actionable, not vague
-- Use 1-3 bullet points only for REAL risks
 
 Examples of GOOD impact statements:
 - Breaking change: Removes deprecated API endpoint used by mobile app
@@ -219,7 +221,15 @@ NO headers, numbered lists, or summary sections - just simple bullet points or a
         """
         files_str = "\n".join(f"- {f}" for f in changed_files[:10])
 
-        return f"""List anything important for reviewers (dependencies, config changes, migrations, special review areas).
+        return f"""List anything important for reviewers that was NOT already mentioned in the Impact section above.
+
+Focus on: dependencies, config changes, migrations, tricky review areas.
+
+Requirements:
+- Do NOT repeat information from the Impact section
+- Only mention NEW information not covered above
+- If nothing new to add: "No additional notes."
+- Maximum 2 bullet points, 40 words total
 
 Files modified:
 {files_str}
@@ -227,8 +237,7 @@ Files modified:
 Change summary:
 {diff_summary}
 
-If nothing notable: "No additional notes."
-Otherwise: 1-3 brief bullet points. No headers or extra formatting."""
+No headers or extra formatting."""
 
     @staticmethod
     def extract_diff_summary(diff: str, max_length: int = 1000) -> str:

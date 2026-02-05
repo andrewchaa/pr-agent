@@ -13,6 +13,23 @@ from pr_agent.git_operations import GitOperations
 from pr_agent.template_parser import get_pr_template_sections
 
 
+# Temperature settings for conciseness
+TITLE_TEMPERATURE = 0.5  # Keep current
+WHY_TEMPERATURE = 0.4    # Slightly lower for focus
+IMPACT_TEMPERATURE = 0.3  # Factual, terse
+NOTES_TEMPERATURE = 0.3   # Factual, no repetition
+
+# Max token limits for sections
+WHY_MAX_TOKENS = 100     # ~75 words
+IMPACT_MAX_TOKENS = 50   # ~35-40 words (target ~25, allow buffer)
+NOTES_MAX_TOKENS = 60    # ~45 words
+
+# Diff context limits (reduced ~50%)
+WHY_DIFF_LIMIT = 800     # Down from 1500
+IMPACT_DIFF_LIMIT = 500  # Down from 1000
+NOTES_DIFF_LIMIT = 500   # Down from 1000
+
+
 class PRGenerator:
     """Generates PR titles and descriptions using LLM."""
 
@@ -63,7 +80,7 @@ class PRGenerator:
         title = self.llm_client.generate(
             prompt=prompt,
             system=self.prompts.SYSTEM_PROMPT,
-            temperature=0.5,
+            temperature=TITLE_TEMPERATURE,
         )
 
         # Ensure title starts with ticket number
@@ -97,13 +114,14 @@ class PRGenerator:
         prompt = self.prompts.generate_why_prompt(user_intent, changed_files)
 
         if diff and len(diff) < self.max_diff_tokens:
-            diff_summary = self.prompts.extract_diff_summary(diff, 1500)
+            diff_summary = self.prompts.extract_diff_summary(diff, WHY_DIFF_LIMIT)
             prompt += f"\n\nCode changes (summary):\n{diff_summary}"
 
         response = self.llm_client.generate(
             prompt=prompt,
             system=self.prompts.SYSTEM_PROMPT,
-            temperature=0.7,
+            temperature=WHY_TEMPERATURE,
+            max_tokens=WHY_MAX_TOKENS,
         )
 
         return response.strip()
@@ -128,13 +146,14 @@ class PRGenerator:
         prompt = self.prompts.generate_impact_prompt(changed_files, commit_messages)
 
         if diff:
-            diff_summary = self.prompts.extract_diff_summary(diff, 1000)
+            diff_summary = self.prompts.extract_diff_summary(diff, IMPACT_DIFF_LIMIT)
             prompt += f"\n\nCode changes (summary):\n{diff_summary}"
 
         response = self.llm_client.generate(
             prompt=prompt,
             system=self.prompts.SYSTEM_PROMPT,
-            temperature=0.7,
+            temperature=IMPACT_TEMPERATURE,
+            max_tokens=IMPACT_MAX_TOKENS,
         )
 
         return response.strip()
@@ -156,14 +175,15 @@ class PRGenerator:
         """
         diff_summary = ""
         if diff:
-            diff_summary = self.prompts.extract_diff_summary(diff, 1000)
+            diff_summary = self.prompts.extract_diff_summary(diff, NOTES_DIFF_LIMIT)
 
         prompt = self.prompts.generate_notes_prompt(changed_files, diff_summary)
 
         response = self.llm_client.generate(
             prompt=prompt,
             system=self.prompts.SYSTEM_PROMPT,
-            temperature=0.7,
+            temperature=NOTES_TEMPERATURE,
+            max_tokens=NOTES_MAX_TOKENS,
         )
 
         return response.strip()
