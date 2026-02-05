@@ -1,12 +1,12 @@
 # PR Agent
 
-Automated GitHub pull request creation using GitHub Copilot (Claude Haiku 4.5).
+Automated GitHub pull request creation using local LLM (Ollama + Qwen 2.5 3B).
 
-PR Agent is a CLI tool that analyzes your code changes and generates intelligent, comprehensive PR descriptions using Claude Haiku 4.5 via GitHub Copilot. It extracts ticket numbers from branch names, prompts you for context, and creates well-structured pull requests on GitHub.
+PR Agent is a CLI tool that analyzes your code changes and generates intelligent, comprehensive PR descriptions using a local language model. It extracts ticket numbers from branch names, prompts you for context, and creates well-structured pull requests on GitHub.
 
 ## Features
 
-- **Claude Haiku 4.5 via GitHub Copilot**: Uses enterprise-grade LLM (requires Copilot subscription)
+- **Local LLM**: Uses Ollama with Qwen 2.5 3B model (no external API calls)
 - **Intelligent PR Descriptions**: Generates comprehensive PR descriptions based on code changes
 - **Smart Ticket Extraction**: AI-powered extraction handles any branch naming convention (regex → AI → manual fallback)
 - **Auto-Detect Base Branch**: Automatically detects default branch (main, master, develop) - no configuration needed
@@ -21,10 +21,20 @@ PR Agent is a CLI tool that analyzes your code changes and generates intelligent
 Before using PR Agent, ensure you have:
 
 1. **Python 3.10+** installed
-2. **GitHub Copilot subscription** (individual or enterprise)
-3. **GitHub account** - You'll authenticate via OAuth device flow on first run
-
-**Note**: No manual token setup needed! The tool handles authentication automatically.
+2. **Ollama** installed and running
+   ```bash
+   # Install Ollama: https://ollama.ai
+   ollama serve
+   ```
+3. **Qwen 2.5 3B model** pulled
+   ```bash
+   ollama pull qwen2.5:3b
+   ```
+4. **GitHub CLI** installed and authenticated
+   ```bash
+   # Install: https://cli.github.com/
+   gh auth login
+   ```
 
 ## Installation
 
@@ -53,14 +63,9 @@ pip install .
    ```bash
    pr-agent create
    ```
-4. **First run only**: Authenticate with GitHub Copilot
-   - Visit the URL shown (e.g., `github.com/login/device`)
-   - Enter the device code displayed
-   - Authorize the application
-   - Token is cached for future use
-5. Answer the prompt about your change purpose
-6. Review the generated PR preview
-7. Confirm to create the PR
+4. Answer the prompt about your change purpose
+5. Review the generated PR preview
+6. Confirm to create the PR
 
 **Note:** You must commit your changes BEFORE running pr-agent. The tool analyzes committed changes, not uncommitted files.
 
@@ -139,7 +144,9 @@ pr-agent create --web
 
 ### Use Custom Model
 
-The model is configured to use Claude Haiku 4.5 via GitHub Copilot and cannot be changed at runtime.
+```bash
+pr-agent create --model qwen2.5:7b
+```
 
 ### Use Custom Config File
 
@@ -168,13 +175,8 @@ This creates `~/.config/pr-agent/config.yaml` with default settings.
 
 ```yaml
 # Model settings
-model: "claude-haiku-4.5"
-copilot_api_base: "https://api.githubcopilot.com"
-copilot_timeout: 60
-
-# Authentication (optional)
-# Token directory for cached credentials (default: ~/.config/pr-agent/copilot)
-# copilot_token_dir: "/custom/path/to/tokens"
+model: "qwen2.5:3b"
+ollama_base_url: "http://localhost:11434"
 
 # Git settings
 default_base_branch: "main"
@@ -182,15 +184,23 @@ ticket_pattern: "STAR-(\\d+)"
 
 # LLM settings
 max_diff_tokens: 8000
+
+# PR template
+template:
+  sections:
+    - "Why are you making this change?"
+    - "What are the possible impacts of your change to production?"
+    - "Is there anything else PR reviewers should know about?"
 ```
 
 ### Environment Variables
 
-Configuration options can be set via environment variables with the `PR_AGENT_` prefix:
+All configuration options can be set via environment variables with the `PR_AGENT_` prefix:
 
 ```bash
+export PR_AGENT_MODEL="qwen2.5:7b"
 export PR_AGENT_BASE_BRANCH="develop"
-export PR_AGENT_COPILOT_TOKEN_DIR="/custom/path"
+export PR_AGENT_OLLAMA_URL="http://localhost:11434"
 ```
 
 ## Branch Naming Convention
@@ -228,22 +238,17 @@ The AI extraction means you don't need to follow strict branch naming rules!
 
 ## How It Works
 
-1. **Validation**: Checks for git repo and GitHub CLI authentication
-2. **Copilot Authentication**:
-   - Checks for cached Copilot token
-   - If not found, triggers OAuth device flow
-   - User authorizes via browser
-   - Token cached for ~2 hours
-3. **Information Gathering**:
+1. **Validation**: Checks for git repo, GitHub authentication, and Ollama service
+2. **Information Gathering**:
    - Extracts current branch name
    - Intelligently parses ticket number (regex → AI → manual)
    - Retrieves git diff and changed files
    - Prompts user for change purpose
-4. **AI Generation**:
+3. **AI Generation**:
    - Generates PR title using ticket number and user intent
    - Analyzes code changes to answer template questions
    - Creates comprehensive PR description
-5. **Review & Create**:
+4. **Review & Create**:
    - Shows preview of generated PR
    - Pushes branch if needed
    - Creates PR on GitHub
@@ -258,32 +263,16 @@ Make sure you're running the command from within a git repository.
 
 Run `gh auth login` to authenticate with GitHub.
 
-### Error: Copilot authentication failed
+### Error: Ollama service not available
 
-PR Agent uses OAuth device flow for authentication. If you see this error:
+Start Ollama with `ollama serve` in a separate terminal.
 
-1. **First time users**: The device flow will trigger automatically
-   ```bash
-   pr-agent create
-   # Follow the on-screen instructions
-   ```
+### Error: Model not found
 
-2. **Token expired**: Clear cached tokens and re-authenticate
-   ```bash
-   rm -rf ~/.config/pr-agent/copilot
-   pr-agent create
-   ```
-
-3. **Verify Copilot subscription**:
-   - Visit https://github.com/settings/copilot
-   - Ensure you have an active subscription
-   - Check that API access is enabled
-
-4. **Device flow steps**:
-   - Visit the URL shown (e.g., `github.com/login/device`)
-   - Enter the 8-character code displayed
-   - Click "Authorize"
-   - Return to terminal to continue
+Pull the model with:
+```bash
+ollama pull qwen2.5:3b
+```
 
 ### Error: Base branch 'main' not found
 
@@ -313,6 +302,7 @@ The error message will suggest available branches in your repository.
 - Ensure your git diff contains meaningful changes
 - Provide a clear description when prompted for change purpose
 - Try increasing `max_diff_tokens` in config for complex changes
+- Consider using a larger model (e.g., `qwen2.5:7b`)
 
 ### PR creation fails
 
@@ -326,15 +316,14 @@ The error message will suggest available branches in your repository.
 
 ```
 pr-agent/
-├── src/
+├── pr_agent/
 │   ├── __init__.py           # Package initialization
 │   ├── __main__.py           # Module entry point
 │   ├── cli.py                # Main CLI interface
 │   ├── config.py             # Configuration management
-│   ├── copilot_auth.py       # OAuth device flow authenticator
 │   ├── git_operations.py     # Git interactions
 │   ├── github_operations.py  # GitHub CLI wrapper
-│   ├── llm_client.py         # GitHub Copilot API client
+│   ├── llm_client.py         # Ollama API client
 │   ├── pr_generator.py       # PR generation logic
 │   ├── prompts.py            # LLM prompt templates
 │   └── exceptions.py         # Custom exceptions
@@ -353,8 +342,8 @@ pytest
 ### Code Formatting
 
 ```bash
-black src/
-ruff check src/
+black pr_agent/
+ruff check pr_agent/
 ```
 
 ## Examples
@@ -367,7 +356,8 @@ $ pr-agent create
 
 ✓ Git repository detected
 ✓ GitHub CLI authenticated
-✓ Copilot API key configured
+✓ Ollama service available
+✓ Model 'qwen2.5:3b' available
 
 Current branch: feature/STAR-12345-add-oauth
 
@@ -394,7 +384,8 @@ $ pr-agent create
 
 ✓ Git repository detected
 ✓ GitHub CLI authenticated
-✓ Copilot API key configured
+✓ Ollama service available
+✓ Model 'qwen2.5:3b' available
 
 Current branch: bugfix_with_star_422270_somewhere
 
@@ -443,6 +434,15 @@ ticket_pattern: "(ENG-\\d+)"
 
 Create `.pr-agent.yaml` in your repository root for project-specific settings.
 
+### Using Different Models
+
+PR Agent supports any Ollama model. Larger models may provide better results:
+
+```bash
+ollama pull qwen2.5:7b
+pr-agent create --model qwen2.5:7b
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
@@ -456,9 +456,10 @@ MIT License
 For issues and questions:
 - Create an issue in the GitHub repository
 - Check the troubleshooting section above
+- Review Ollama documentation: https://ollama.ai
 
 ## Acknowledgments
 
-- Built with [GitHub Copilot](https://github.com/features/copilot) for enterprise-grade LLM access
-- Uses [Claude Haiku 4.5](https://www.anthropic.com/claude) by Anthropic
+- Built with [Ollama](https://ollama.ai) for local LLM inference
+- Uses [Qwen 2.5](https://github.com/QwenLM/Qwen2.5) model
 - Powered by [GitHub CLI](https://cli.github.com/)

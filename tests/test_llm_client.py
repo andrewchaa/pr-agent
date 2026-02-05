@@ -2,49 +2,38 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from src.llm_client import CopilotClient
-from src.exceptions import LLMError
+from requests.exceptions import ConnectionError
+from src.llm_client import OllamaClient
+from src.exceptions import OllamaNotAvailableError, ModelNotFoundError
 
 
-class TestCopilotClient:
-    """Test Copilot client functionality."""
+class TestOllamaClient:
+    """Test Ollama client functionality."""
 
     def test_initialization(self):
         """Test client initialization."""
-        client = CopilotClient(
-            api_base="https://api.githubcopilot.com", api_key="test-key", timeout=60
-        )
-        assert client.api_base == "https://api.githubcopilot.com/v1"
-        assert client.api_key == "test-key"
-        assert client.timeout == 60
+        client = OllamaClient()
+        assert client.base_url == "http://localhost:11434"
+        assert client.timeout == 120
 
-    def test_api_base_normalization(self):
-        """Test API base URL normalization."""
-        client = CopilotClient(api_base="https://api.githubcopilot.com/", api_key="test-key")
-        assert client.api_base == "https://api.githubcopilot.com/v1"
+    def test_custom_url(self):
+        """Test client with custom URL."""
+        client = OllamaClient(base_url="http://custom:8080")
+        assert client.base_url == "http://custom:8080"
 
-    @patch("requests.post")
-    def test_generate_success(self, mock_post):
-        """Test successful generation."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Generated content"}}]
-        }
-        mock_post.return_value = mock_response
+    @patch('src.llm_client.requests.get')
+    def test_check_availability_success(self, mock_get):
+        """Test successful availability check."""
+        mock_get.return_value.status_code = 200
 
-        client = CopilotClient(api_base="https://api.githubcopilot.com", api_key="test-key")
-        result = client.generate("Test prompt")
-        assert result == "Generated content"
+        client = OllamaClient()
+        assert client.check_availability() is True
 
-    @patch("requests.post")
-    def test_generate_auth_failure(self, mock_post):
-        """Test authentication failure."""
-        mock_response = Mock()
-        mock_response.status_code = 401
-        mock_response.raise_for_status.side_effect = Exception("Unauthorized")
-        mock_post.return_value = mock_response
+    @patch('src.llm_client.requests.get')
+    def test_check_availability_failure(self, mock_get):
+        """Test failed availability check."""
+        mock_get.side_effect = ConnectionError()
 
-        client = CopilotClient(api_base="https://api.githubcopilot.com", api_key="invalid-key")
-        with pytest.raises(LLMError, match="authentication failed"):
-            client.generate("Test prompt")
+        client = OllamaClient()
+        with pytest.raises(OllamaNotAvailableError):
+            client.check_availability()

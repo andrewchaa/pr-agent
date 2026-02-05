@@ -18,15 +18,14 @@ from rich import print as rprint
 from src.config import load_config, Config
 from src.git_operations import GitOperations
 from src.github_operations import GitHubOperations
-from src.llm_client import CopilotClient
+from src.llm_client import OllamaClient
 from src.pr_generator import PRGenerator
-from src.copilot_auth import CopilotAuthenticator
 from src.exceptions import (
     PRAgentError,
     NotInGitRepoError,
     NotAuthenticatedError,
-    CopilotAuthError,
-    CopilotConfigError,
+    OllamaNotAvailableError,
+    ModelNotFoundError,
     NoChangesError,
     GitError,
     LLMError,
@@ -38,6 +37,8 @@ console = Console()
 def validate_prerequisites(
     git_ops: GitOperations,
     github_ops: GitHubOperations,
+    llm_client: OllamaClient,
+    model: str,
 ) -> bool:
     """
     Validate all prerequisites for PR creation.
@@ -45,6 +46,8 @@ def validate_prerequisites(
     Args:
         git_ops: Git operations handler
         github_ops: GitHub operations handler
+        llm_client: Ollama client
+        model: Model name to check
 
     Returns:
         True if all checks pass.
@@ -70,6 +73,22 @@ def validate_prerequisites(
         console.print(f"✗ {e}", style="red")
         raise
 
+    # Check 3: Ollama service
+    try:
+        llm_client.check_availability()
+        console.print("✓ Ollama service available", style="green")
+    except OllamaNotAvailableError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
+    # Check 4: Model availability
+    try:
+        llm_client.check_model_exists(model)
+        console.print(f"✓ Model '{model}' available", style="green")
+    except ModelNotFoundError as e:
+        console.print(f"✗ {e}", style="red")
+        raise
+
     console.print()
     return True
 
@@ -77,7 +96,7 @@ def validate_prerequisites(
 def get_ticket_number(
     git_ops: GitOperations,
     config: Config,
-    llm_client: Optional[CopilotClient] = None,
+    llm_client: Optional[OllamaClient] = None,
 ) -> str:
     """
     Extract or prompt for ticket number.
@@ -106,11 +125,12 @@ def get_ticket_number(
 
     # Method 2: Try LLM extraction (handles variations)
     if llm_client:
-        console.print(f"[yellow]Regex pattern didn't match. Trying AI extraction...[/yellow]")
+        console.print(
+            f"[yellow]Regex pattern didn't match. Trying AI extraction...[/yellow]"
+        )
         try:
             # Extract ticket prefix from pattern (e.g., "STAR-(\d+)" -> "STAR")
             import re
-
             pattern_match = re.match(r"([A-Z]+)-", config.ticket_pattern)
             ticket_prefix = pattern_match.group(1) if pattern_match else "STAR"
 
@@ -118,6 +138,7 @@ def get_ticket_number(
                 ticket_number = llm_client.extract_ticket_number(
                     branch_name=branch_name,
                     ticket_prefix=ticket_prefix,
+                    model=config.model,
                 )
 
             if ticket_number:
@@ -127,8 +148,13 @@ def get_ticket_number(
             console.print(f"[yellow]AI extraction failed: {e}[/yellow]")
 
     # Method 3: Manual input (fallback)
-    console.print(f"[yellow]Could not extract ticket number from branch '{branch_name}'[/yellow]")
-    ticket_number = Prompt.ask("Please enter ticket number (e.g., STAR-12345)", default="STAR-0000")
+    console.print(
+        f"[yellow]Could not extract ticket number from branch '{branch_name}'[/yellow]"
+    )
+    ticket_number = Prompt.ask(
+        "Please enter ticket number (e.g., STAR-12345)",
+        default="STAR-0000"
+    )
     return ticket_number
 
 
@@ -141,9 +167,7 @@ def prompt_user_intent() -> str:
     """
     console.print()
     console.print("[bold cyan]What is the purpose of this change?[/bold cyan]")
-    console.print(
-        "[dim]Describe what you're trying to achieve (this helps generate better PR descriptions)[/dim]"
-    )
+    console.print("[dim]Describe what you're trying to achieve (this helps generate better PR descriptions)[/dim]")
     console.print()
 
     user_intent = Prompt.ask("Purpose")
@@ -169,7 +193,11 @@ def display_preview(title: str, body: str, base_branch: str) -> None:
     console.print()
 
     # Display title
-    console.print(Panel(f"[bold]{title}[/bold]", title="Title", border_style="cyan"))
+    console.print(Panel(
+        f"[bold]{title}[/bold]",
+        title="Title",
+        border_style="cyan"
+    ))
 
     # Display base branch
     console.print(f"[dim]Base branch:[/dim] {base_branch}")
@@ -177,7 +205,11 @@ def display_preview(title: str, body: str, base_branch: str) -> None:
 
     # Display body
     md = Markdown(body)
-    console.print(Panel(md, title="Description", border_style="cyan"))
+    console.print(Panel(
+        md,
+        title="Description",
+        border_style="cyan"
+    ))
     console.print()
 
 
@@ -190,27 +222,36 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--base-branch",
-    "-b",
+    "--base-branch", "-b",
     default=None,
-    help="Base branch for the PR (default: from config or 'main')",
+    help="Base branch for the PR (default: from config or 'main')"
 )
 @click.option(
-    "--model",
-    "-m",
+    "--model", "-m",
     default=None,
-    help="LLM model to use (default: from config or 'claude-haiku-4.5')",
+    help="LLM model to use (default: from config or 'qwen2.5:3b')"
 )
 @click.option(
-    "--config",
-    "-c",
+    "--config", "-c",
     type=click.Path(exists=True, path_type=Path),
     default=None,
-    help="Path to config file (default: ~/.config/pr-agent/config.yaml)",
+    help="Path to config file (default: ~/.config/pr-agent/config.yaml)"
 )
-@click.option("--draft", "-d", is_flag=True, help="Create as draft PR")
-@click.option("--web", "-w", is_flag=True, help="Open PR in browser after creation")
-@click.option("--dry-run", is_flag=True, help="Preview PR without creating it")
+@click.option(
+    "--draft", "-d",
+    is_flag=True,
+    help="Create as draft PR"
+)
+@click.option(
+    "--web", "-w",
+    is_flag=True,
+    help="Open PR in browser after creation"
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview PR without creating it"
+)
 def create(
     base_branch: Optional[str],
     model: Optional[str],
@@ -233,30 +274,13 @@ def create(
         # Initialize components
         git_ops = GitOperations()
         github_ops = GitHubOperations()
-
-        # Validate prerequisites first
-        validate_prerequisites(git_ops, github_ops)
-
-        # Initialize Copilot authenticator and get token
-        console.print("[bold blue]Authenticating with GitHub Copilot...[/bold blue]")
-        authenticator = CopilotAuthenticator(token_dir=cfg.copilot_token_dir)
-
-        try:
-            copilot_token = authenticator.get_copilot_token()
-            console.print("✓ Copilot authentication successful", style="green")
-            console.print()
-        except CopilotAuthError as e:
-            console.print(f"✗ {e}", style="red")
-            console.print("\n[yellow]To authenticate:[/yellow]")
-            console.print("  Run this command again and follow the device flow instructions.")
-            raise
-
-        # Create LLM client with Copilot token
-        llm_client = CopilotClient(
-            api_base=cfg.copilot_api_base,
-            api_key=copilot_token,
-            timeout=cfg.copilot_timeout,
+        llm_client = OllamaClient(
+            base_url=cfg.ollama_base_url,
+            timeout=cfg.ollama_timeout
         )
+
+        # Validate prerequisites
+        validate_prerequisites(git_ops, github_ops, llm_client, cfg.model)
 
         # Auto-detect base branch if not explicitly set
         if not base_branch:  # Only auto-detect if user didn't specify
@@ -285,7 +309,9 @@ def create(
 
         # Check for uncommitted changes
         if git_ops.has_uncommitted_changes():
-            console.print("[yellow]You have uncommitted changes.[/yellow]")
+            console.print(
+                "[yellow]You have uncommitted changes.[/yellow]"
+            )
             console.print()
 
             # Offer to commit changes
@@ -293,9 +319,7 @@ def create(
                 try:
                     # Get uncommitted changes info
                     diff = git_ops.get_uncommitted_diff()
-                    changed_files = (
-                        git_ops.repo.git.diff("HEAD", name_only=True).strip().split("\n")
-                    )
+                    changed_files = git_ops.repo.git.diff('HEAD', name_only=True).strip().split('\n')
                     changed_files = [f for f in changed_files if f]  # Filter empty
 
                     if not changed_files:
@@ -303,13 +327,12 @@ def create(
                     else:
                         # Generate commit message
                         console.print()
-                        with console.status(
-                            "[bold cyan]Generating commit message with AI...[/bold cyan]"
-                        ):
+                        with console.status("[bold cyan]Generating commit message with AI...[/bold cyan]"):
                             commit_message = llm_client.generate_commit_message(
                                 ticket_number=ticket_number,
                                 changed_files=changed_files,
                                 diff=diff,
+                                model=cfg.model,
                             )
 
                         # Display and confirm
@@ -357,9 +380,7 @@ def create(
             console.print()
             console.print("To create a PR, you need to:")
             console.print("  1. Make some changes")
-            console.print(
-                "  2. Commit them: [cyan]git add . && git commit -m 'your message'[/cyan]"
-            )
+            console.print("  2. Commit them: [cyan]git add . && git commit -m 'your message'[/cyan]")
             console.print(f"  3. Make sure you're not on '{cfg.default_base_branch}'")
             sys.exit(1)
 
@@ -380,61 +401,21 @@ def create(
                 repo_path=str(git_ops.get_repository_root()),
             )
 
-            # Generate title (once, outside loop)
+            # Generate title
             title = pr_generator.generate_title(
                 ticket_number=ticket_number,
                 branch_name=branch_name,
                 user_intent=user_intent,
             )
 
-        # Generate description with regeneration loop
-        feedback_history = []
-        max_iterations = 5  # Prevent infinite loops
-        iteration = 0
+            # Generate description
+            description = pr_generator.generate_description(
+                user_intent=user_intent,
+                base_branch=cfg.default_base_branch,
+            )
 
-        while iteration < max_iterations:
-            iteration += 1
-
-            # Generate or regenerate description
-            if feedback_history:
-                console.print(f"\n[cyan]Regenerating description (attempt {iteration})...[/cyan]")
-                with console.status("[bold green]Regenerating with your feedback...[/bold green]"):
-                    description = pr_generator.generate_description(
-                        user_intent=user_intent,
-                        base_branch=cfg.default_base_branch,
-                        feedback_history=feedback_history,
-                    )
-            else:
-                description = pr_generator.generate_description(
-                    user_intent=user_intent,
-                    base_branch=cfg.default_base_branch,
-                )
-
-            # Display preview
-            display_preview(title, description, cfg.default_base_branch)
-
-            # Description approval checkpoint
-            if Confirm.ask("Are you happy with the description?", default=True):
-                # User approved - break out of loop
-                break
-            else:
-                # User rejected - collect feedback
-                console.print("\n[yellow]Let's improve the description.[/yellow]")
-                feedback = Prompt.ask(
-                    "What would you like to change? (or type 'exit' to quit)",
-                    default=""
-                )
-
-                if feedback.lower() in ['exit', 'quit', 'cancel', '']:
-                    console.print("[yellow]Description regeneration cancelled. Exiting.[/yellow]")
-                    sys.exit(0)
-
-                feedback_history.append(feedback)
-
-                # Check if we've hit max iterations
-                if iteration >= max_iterations:
-                    console.print(f"[yellow]Reached maximum regeneration attempts ({max_iterations}). Using current version.[/yellow]")
-                    break
+        # Display preview
+        display_preview(title, description, cfg.default_base_branch)
 
         # Dry run mode - exit here
         if dry_run:

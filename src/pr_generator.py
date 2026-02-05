@@ -7,7 +7,7 @@ using git information and user input.
 
 from typing import List, Optional, Dict
 
-from src.llm_client import CopilotClient
+from src.llm_client import OllamaClient
 from src.prompts import PRPrompts
 from src.git_operations import GitOperations
 from src.template_parser import get_pr_template_sections
@@ -35,9 +35,9 @@ class PRGenerator:
 
     def __init__(
         self,
-        llm_client: CopilotClient,
+        llm_client: OllamaClient,
         git_ops: GitOperations,
-        model: str = "claude-haiku-4.5",
+        model: str = "qwen2.5:3b",
         max_diff_tokens: int = 8000,
         repo_path: Optional[str] = None,
     ):
@@ -45,9 +45,9 @@ class PRGenerator:
         Initialize PR generator.
 
         Args:
-            llm_client: Copilot client for LLM interactions
+            llm_client: Ollama client for LLM interactions
             git_ops: Git operations handler
-            model: Model name (for compatibility, uses Copilot's claude-haiku-4.5)
+            model: Model name (default: qwen2.5:3b)
             max_diff_tokens: Maximum characters for diff context
             repo_path: Path to repository root (used for template loading)
         """
@@ -79,6 +79,7 @@ class PRGenerator:
 
         title = self.llm_client.generate(
             prompt=prompt,
+            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=TITLE_TEMPERATURE,
         )
@@ -122,9 +123,9 @@ class PRGenerator:
 
         response = self.llm_client.generate(
             prompt=prompt,
+            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=WHY_TEMPERATURE,
-            max_tokens=WHY_MAX_TOKENS,
         )
 
         return response.strip()
@@ -157,9 +158,9 @@ class PRGenerator:
 
         response = self.llm_client.generate(
             prompt=prompt,
+            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=IMPACT_TEMPERATURE,
-            max_tokens=IMPACT_MAX_TOKENS,
         )
 
         return response.strip()
@@ -190,9 +191,9 @@ class PRGenerator:
 
         response = self.llm_client.generate(
             prompt=prompt,
+            model=self.model,
             system=self.prompts.SYSTEM_PROMPT,
             temperature=NOTES_TEMPERATURE,
-            max_tokens=NOTES_MAX_TOKENS,
         )
 
         return response.strip()

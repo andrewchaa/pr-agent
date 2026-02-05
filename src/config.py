@@ -23,11 +23,9 @@ class Config:
     """Configuration for pr-agent."""
 
     # Model settings
-    model: str = "claude-haiku-4.5"
-    copilot_api_base: str = "https://api.githubcopilot.com"
-    copilot_api_key: Optional[str] = None
-    copilot_timeout: int = 60
-    copilot_token_dir: Optional[str] = None
+    model: str = "qwen2.5:3b"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_timeout: int = 120
 
     # Git settings
     default_base_branch: str = "main"
@@ -63,7 +61,7 @@ class Config:
             return cls()
 
         try:
-            with open(config_path, "r") as f:
+            with open(config_path, 'r') as f:
                 data = yaml.safe_load(f) or {}
 
             return cls.from_dict(data)
@@ -86,16 +84,10 @@ class Config:
         """
         # Filter out unknown keys and nested structures
         valid_keys = {
-            "model",
-            "copilot_api_base",
-            "copilot_api_key",
-            "copilot_timeout",
-            "default_base_branch",
-            "ticket_pattern",
-            "max_diff_tokens",
-            "temperature",
-            "draft_pr",
-            "open_in_browser",
+            "model", "ollama_base_url", "ollama_timeout",
+            "default_base_branch", "ticket_pattern",
+            "max_diff_tokens", "temperature",
+            "draft_pr", "open_in_browser"
         }
 
         filtered_data = {k: v for k, v in data.items() if k in valid_keys}
@@ -116,22 +108,19 @@ class Config:
         config = cls()
 
         # Map environment variables to config attributes
-        env_mapping = {
+        env_mappings = {
             "PR_AGENT_MODEL": "model",
-            "PR_AGENT_COPILOT_API_BASE": "copilot_api_base",
-            "PR_AGENT_COPILOT_KEY": "copilot_api_key",
-            "PR_AGENT_COPILOT_TIMEOUT": "copilot_timeout",
-            "PR_AGENT_COPILOT_TOKEN_DIR": "copilot_token_dir",
+            "PR_AGENT_OLLAMA_URL": "ollama_base_url",
             "PR_AGENT_BASE_BRANCH": "default_base_branch",
             "PR_AGENT_TICKET_PATTERN": "ticket_pattern",
             "PR_AGENT_MAX_DIFF_TOKENS": "max_diff_tokens",
         }
 
-        for env_var, attr_name in env_mapping.items():
+        for env_var, attr_name in env_mappings.items():
             value = os.getenv(env_var)
             if value is not None:
                 # Convert to appropriate type
-                if attr_name in {"max_diff_tokens", "copilot_timeout"}:
+                if attr_name == "max_diff_tokens":
                     value = int(value)
                 setattr(config, attr_name, value)
 
@@ -166,15 +155,14 @@ class Config:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         default_config = {
-            "model": "claude-haiku-4.5",
-            "copilot_api_base": "https://api.githubcopilot.com",
-            "copilot_timeout": 60,
+            "model": "qwen2.5:3b",
+            "ollama_base_url": "http://localhost:11434",
             "default_base_branch": "main",
             "ticket_pattern": "STAR-(\\d+)",
             "max_diff_tokens": 8000,
         }
 
-        with open(path, "w") as f:
+        with open(path, 'w') as f:
             yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
 
         return path
@@ -201,10 +189,8 @@ class Config:
         # Create a copy of current config
         new_config = Config(
             model=model or self.model,
-            copilot_api_base=self.copilot_api_base,
-            copilot_api_key=self.copilot_api_key,
-            copilot_timeout=self.copilot_timeout,
-            copilot_token_dir=self.copilot_token_dir,
+            ollama_base_url=self.ollama_base_url,
+            ollama_timeout=self.ollama_timeout,
             default_base_branch=base_branch or self.default_base_branch,
             ticket_pattern=self.ticket_pattern,
             max_diff_tokens=self.max_diff_tokens,
@@ -249,16 +235,8 @@ def load_config(
     if config_file or Config.get_default_config_path().exists():
         file_config = Config.from_file(config_file)
         # Merge: file config takes precedence over env
-        for attr in [
-            "model",
-            "copilot_api_base",
-            "copilot_api_key",
-            "copilot_timeout",
-            "copilot_token_dir",
-            "default_base_branch",
-            "ticket_pattern",
-            "max_diff_tokens",
-        ]:
+        for attr in ["model", "ollama_base_url", "default_base_branch",
+                     "ticket_pattern", "max_diff_tokens"]:
             file_value = getattr(file_config, attr)
             # Only use file value if it's not the default
             default_value = getattr(Config(), attr)

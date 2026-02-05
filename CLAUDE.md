@@ -25,32 +25,32 @@ pytest
 pytest tests/test_cli.py
 
 # Run with coverage
-pytest --cov=src
+pytest --cov=pr_agent
 ```
 
 ### Code Quality
 ```bash
 # Format code
-black src/
+black pr_agent/
 
 # Lint code
-ruff check src/
+ruff check pr_agent/
 ```
 
 ### Prerequisites for Testing
-Ensure these are available before testing:
-- GitHub Copilot subscription with API access
-- For device flow testing: ability to authorize via browser
+Ensure these are running/available before testing:
+- Ollama service: `ollama serve`
+- Model pulled: `ollama pull qwen2.5:3b`
+- GitHub CLI authenticated: `gh auth login`
 
 ## Architecture
 
 ### Core Workflow
 PR creation follows this pipeline:
-1. **Validation** (cli.py) - Check git repo and GitHub CLI auth
-2. **Authentication** (copilot_auth.py) - OAuth device flow for Copilot token
-3. **Ticket Extraction** (cli.py) - Three-tier: regex → AI → manual
-4. **Content Generation** (pr_generator.py) - LLM generates title + description sections
-5. **GitHub Integration** (github_operations.py) - Push branch + create PR via `gh` CLI
+1. **Validation** (cli.py) - Check git repo, GitHub auth, Ollama, model
+2. **Ticket Extraction** (cli.py) - Three-tier: regex → AI → manual
+3. **Content Generation** (pr_generator.py) - LLM generates title + description sections
+4. **GitHub Integration** (github_operations.py) - Push branch + create PR via `gh` CLI
 
 ### Component Responsibilities
 
@@ -64,13 +64,6 @@ PR creation follows this pipeline:
 - Priority: CLI args → config file → env vars → defaults
 - Default config: `~/.config/pr-agent/config.yaml`
 - Supports repository-specific `.pr-agent.yaml`
-- Token directory for OAuth credentials
-
-**copilot_auth.py** - OAuth device flow authenticator
-- Implements GitHub OAuth device flow
-- Exchanges access token for Copilot API token
-- Caches tokens locally (~/.config/pr-agent/copilot)
-- Auto-refreshes expired tokens
 
 **git_operations.py** - Git interactions via GitPython
 - Diff and commit retrieval
@@ -84,12 +77,11 @@ PR creation follows this pipeline:
 - Pushes branches to remote
 - Checks authentication status
 
-**llm_client.py** - GitHub Copilot API client
-- Generates PR content via Copilot REST API with Claude Haiku 4.5
+**llm_client.py** - Ollama API client
+- Generates PR content via Ollama REST API
 - AI-powered ticket extraction from branch names
 - Configurable temperature (0.1 for extraction, 0.7 for creative)
 - Context truncation for large diffs (default: 8000 tokens)
-- Required headers: copilot-integration-id, editor-version, user-agent, etc.
 
 **pr_generator.py** - PR content generation
 - Generates title (ticket + user intent)
@@ -137,14 +129,6 @@ PR creation follows this pipeline:
 - Supports variable number of sections (not limited to 3)
 - Maps sections to generation methods via keywords (why, impact) or position
 
-**OAuth Device Flow Authentication**
-- Two-step process: GitHub access token → Copilot API token
-- User authorizes via browser (github.com/login/device)
-- Tokens cached locally (~/.config/pr-agent/copilot)
-- Access token: long-lived, stored as plain text
-- API token: short-lived (~2 hours), stored with expiration
-- Auto-refresh on expiry
-
 ## Configuration
 
 Configuration sources (highest to lowest priority):
@@ -154,9 +138,8 @@ Configuration sources (highest to lowest priority):
 4. Hardcoded defaults
 
 Key configurable options:
-- `model` - Model name (default: claude-haiku-4.5)
-- `copilot_api_base` - Copilot API URL (default: https://api.githubcopilot.com)
-- `copilot_token_dir` - Token cache directory (default: ~/.config/pr-agent/copilot)
+- `model` - Ollama model name (default: qwen2.5:3b)
+- `ollama_base_url` - Ollama API URL
 - `default_base_branch` - Base branch for PRs (default: main)
 - `ticket_pattern` - Regex for ticket extraction (default: STAR-(\d+))
 - `max_diff_tokens` - Token limit for diffs (default: 8000)
@@ -190,7 +173,7 @@ Provide helpful suggestions when validation fails (e.g., suggest available branc
 ## Testing Notes
 
 When writing tests:
-- Mock external dependencies (Copilot API, GitHub CLI, git operations)
+- Mock external dependencies (Ollama API, GitHub CLI, git operations)
 - Test three-tier ticket extraction flow
 - Test base branch auto-detection logic
 - Test committed changes validation
@@ -198,5 +181,3 @@ When writing tests:
 - Test PR template parsing with various markdown formats
 - Test fallback to defaults when template doesn't exist
 - Test dynamic section generation with variable section counts
-- Test OAuth device flow (mock GitHub OAuth endpoints)
-- Test token caching and expiration handling
