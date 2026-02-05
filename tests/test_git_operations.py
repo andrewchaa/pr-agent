@@ -1,8 +1,8 @@
 """Tests for git operations module."""
 
 import pytest
-from pr_agent.git_operations import GitOperations
-from pr_agent.exceptions import NotInGitRepoError
+from src.git_operations import GitOperations
+from src.exceptions import NotInGitRepoError
 
 
 class TestTicketExtraction:

@@ -12,7 +12,7 @@ from typing import Optional, List
 import git
 from git.exc import InvalidGitRepositoryError
 
-from pr_agent.exceptions import NotInGitRepoError, NoChangesError, BranchNameError
+from src.exceptions import NotInGitRepoError, NoChangesError, BranchNameError
 
 
 class GitOperations:
@@ -206,7 +206,7 @@ class GitOperations:
         Raises:
             GitError: If staging fails.
         """
-        from pr_agent.exceptions import GitError
+        from src.exceptions import GitError
         try:
             self.repo.git.add('-A')
         except git.exc.GitCommandError as e:
@@ -222,7 +222,7 @@ class GitOperations:
         Raises:
             GitError: If commit fails.
         """
-        from pr_agent.exceptions import GitError
+        from src.exceptions import GitError
         try:
             self.repo.index.commit(message)
         except git.exc.GitCommandError as e:

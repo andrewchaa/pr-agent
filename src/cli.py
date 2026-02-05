@@ -15,13 +15,13 @@ from rich.prompt import Prompt, Confirm
 from rich.markdown import Markdown
 from rich import print as rprint
 
-from pr_agent.config import load_config, Config
-from pr_agent.git_operations import GitOperations
-from pr_agent.github_operations import GitHubOperations
-from pr_agent.llm_client import CopilotClient
-from pr_agent.pr_generator import PRGenerator
-from pr_agent.copilot_auth import CopilotAuthenticator
-from pr_agent.exceptions import (
+from src.config import load_config, Config
+from src.git_operations import GitOperations
+from src.github_operations import GitHubOperations
+from src.llm_client import CopilotClient
+from src.pr_generator import PRGenerator
+from src.copilot_auth import CopilotAuthenticator
+from src.exceptions import (
     PRAgentError,
     NotInGitRepoError,
     NotAuthenticatedError,

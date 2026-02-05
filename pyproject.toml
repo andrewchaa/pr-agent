@@ -38,10 +38,10 @@ dev = [
 ]
 
 [project.scripts]
-pr-agent = "pr_agent.cli:main"
+pr-agent = "src.cli:main"
 
 [tool.setuptools]
-packages = ["pr_agent"]
+packages = ["src"]
 
 [tool.black]
 line-length = 100
@@ -56,4 +56,4 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=pr_agent --cov-report=term-missing"
+addopts = "-v --cov=src --cov-report=term-missing"

@@ -25,16 +25,16 @@ pytest
 pytest tests/test_cli.py
 
 # Run with coverage
-pytest --cov=pr_agent
+pytest --cov=src
 ```
 
 ### Code Quality
 ```bash
 # Format code
-black pr_agent/
+black src/
 
 # Lint code
-ruff check pr_agent/
+ruff check src/
 ```
 
 ### Prerequisites for Testing

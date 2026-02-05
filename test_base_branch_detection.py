@@ -5,8 +5,8 @@ Test script for base branch auto-detection.
 Demonstrates the improved base branch detection and error handling.
 """
 
-from pr_agent.git_operations import GitOperations
-from pr_agent.exceptions import BranchNameError
+from src.git_operations import GitOperations
+from src.exceptions import BranchNameError
 
 
 def test_branch_detection():

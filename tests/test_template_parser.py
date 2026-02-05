@@ -1,7 +1,7 @@
 """Tests for template parser module."""
 
 import pytest
-from pr_agent.template_parser import (
+from src.template_parser import (
     read_pr_template,
     parse_template_sections,
     get_pr_template_sections,

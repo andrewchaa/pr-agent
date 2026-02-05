@@ -6,7 +6,7 @@ Successfully implemented an interactive regeneration loop that allows users to p
 
 ## Changes Made
 
-### 1. `/pr_agent/cli.py` (56 lines changed)
+### 1. `/src/cli.py` (56 lines changed)
 
 **Key Changes:**
 - Replaced simple "accept/reject" checkpoint with a regeneration loop (lines 390-437)
@@ -24,7 +24,7 @@ Successfully implemented an interactive regeneration loop that allows users to p
 - Graceful exit options: 'exit', 'quit', 'cancel', or empty input
 - Clear status messages during regeneration
 
-### 2. `/pr_agent/pr_generator.py` (27 lines changed)
+### 2. `/src/pr_generator.py` (27 lines changed)
 
 **Key Changes:**
 - Added `feedback_history: Optional[List[str]]` parameter to:
@@ -35,7 +35,7 @@ Successfully implemented an interactive regeneration loop that allows users to p
 - All methods now pass feedback through to their respective prompt generators
 - Maintains backward compatibility (feedback defaults to empty list)
 
-### 3. `/pr_agent/prompts.py` (72 lines changed)
+### 3. `/src/prompts.py` (72 lines changed)
 
 **Key Changes:**
 - Added `feedback_history: List[str] | None = None` parameter to:
@@ -84,9 +84,9 @@ Regenerating description (attempt 2)...
 
 ## Files Changed Summary
 ```
-pr_agent/cli.py          | 56 lines (+50, -6)
-pr_agent/pr_generator.py | 27 lines (+23, -4)
-pr_agent/prompts.py      | 72 lines (+68, -4)
+src/cli.py          | 56 lines (+50, -6)
+src/pr_generator.py | 27 lines (+23, -4)
+src/prompts.py      | 72 lines (+68, -4)
 -----------------------------------------
 Total                    | 155 lines (+141, -14)
 ```

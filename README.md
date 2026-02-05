@@ -326,7 +326,7 @@ The error message will suggest available branches in your repository.
 
 ```
 pr-agent/
-├── pr_agent/
+├── src/
 │   ├── __init__.py           # Package initialization
 │   ├── __main__.py           # Module entry point
 │   ├── cli.py                # Main CLI interface
@@ -353,8 +353,8 @@ pytest
 ### Code Formatting
 
 ```bash
-black pr_agent/
-ruff check pr_agent/
+black src/
+ruff check src/
 ```
 
 ## Examples

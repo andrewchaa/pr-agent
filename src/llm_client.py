@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 import requests
 from requests.exceptions import HTTPError
 
-from pr_agent.exceptions import LLMError
+from src.exceptions import LLMError
 
 
 COPILOT_VERSION = "0.26.7"
@@ -135,7 +135,7 @@ class CopilotClient:
         branch_name: str,
         ticket_prefix: str = "STAR",
     ) -> Optional[str]:
-        from pr_agent.prompts import PRPrompts
+        from src.prompts import PRPrompts
 
         prompt = PRPrompts.extract_ticket_number_prompt(branch_name, ticket_prefix)
 
@@ -162,7 +162,7 @@ class CopilotClient:
         changed_files: list,
         diff: str,
     ) -> str:
-        from pr_agent.prompts import PRPrompts
+        from src.prompts import PRPrompts
 
         diff_summary = PRPrompts.extract_diff_summary(diff, max_length=2000)
 

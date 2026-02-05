@@ -9,7 +9,7 @@ import json
 import subprocess
 from typing import Optional, Dict, Any
 
-from pr_agent.exceptions import NotAuthenticatedError, GitHubError
+from src.exceptions import NotAuthenticatedError, GitHubError
 
 
 class GitHubOperations:

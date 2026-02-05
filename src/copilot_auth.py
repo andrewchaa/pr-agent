@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import requests
 
-from pr_agent.exceptions import CopilotAuthError
+from src.exceptions import CopilotAuthError
 
 
 GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98"

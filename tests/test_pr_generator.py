@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import Mock
-from pr_agent.pr_generator import PRGenerator
-from pr_agent.prompts import PRPrompts
+from src.pr_generator import PRGenerator
+from src.prompts import PRPrompts
 
 
 class TestPRGenerator:

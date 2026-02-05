@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pr_agent.llm_client import CopilotClient
-from pr_agent.exceptions import LLMError
+from src.llm_client import CopilotClient
+from src.exceptions import LLMError
 
 
 class TestCopilotClient:

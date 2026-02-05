@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any
 
 import yaml
 
-from pr_agent.exceptions import ConfigError
+from src.exceptions import ConfigError
 
 
 @dataclass

@@ -7,10 +7,10 @@ using git information and user input.
 
 from typing import List, Optional, Dict
 
-from pr_agent.llm_client import CopilotClient
-from pr_agent.prompts import PRPrompts
-from pr_agent.git_operations import GitOperations
-from pr_agent.template_parser import get_pr_template_sections
+from src.llm_client import CopilotClient
+from src.prompts import PRPrompts
+from src.git_operations import GitOperations
+from src.template_parser import get_pr_template_sections
 
 
 # Temperature settings for conciseness
@@ -239,7 +239,7 @@ class PRGenerator:
             template_sections = get_pr_template_sections(self.repo_path)
         else:
             # Fallback to defaults if no repo path provided
-            from pr_agent.template_parser import DEFAULT_SECTIONS
+            from src.template_parser import DEFAULT_SECTIONS
 
             template_sections = DEFAULT_SECTIONS.copy()
 
